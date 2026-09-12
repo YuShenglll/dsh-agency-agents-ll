@@ -108,14 +108,20 @@ dsh-agency-agents-ll/
 │  └─ zh/LICENSE          上游 MIT 原文
 ├─ src/
 │  ├─ contract.ts         两端共享常量与纯函数（不得引入 Host 依赖）
-│  ├─ names.ts            分区中英显示名
-│  ├─ index.ts            Host：catalog + 工具 + installSection
+│  ├─ names.ts            18 个分区的中英显示名
+│  ├─ i18n.ts             Host 文案（zh 为 key 集真相源，en 用 satisfies 校验）
+│  ├─ catalog.ts          扫描两棵树、解析 frontmatter、名称解析
+│  ├─ persona.ts          按语言读取 persona 正文并回退
+│  ├─ index.ts            Host：catalog + 三个工具 + installSection
+│  ├─ index.test.ts       vitest
 │  └─ client/index.ts     浏览器：settings.section 页面 + conversation.input.left 触发器
 ├─ cordis.patch.yml
 ├─ tsdown.config.ts
 ├─ scripts/verify.mjs
 └─ package.json
 ```
+
+`lib/index.js` 只允许把 `@deepseek-ai/dsh-tools` 与 `@deepseek-ai/schemastery` 作为外部依赖引用；其余 DSH 包必须同时出现在 `peerDependencies` 里，否则 tsdown 会把它们内联成第二份实现。
 
 ## 8. DSH 装载机制（已核对 harness 源码）
 

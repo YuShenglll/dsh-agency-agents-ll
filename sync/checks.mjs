@@ -54,7 +54,7 @@ const THRESHOLDS = {
 // would silently pair an old Chinese persona with new English instructions.
 // `missing` is deliberately NOT here — an untranslated expert degrades to
 // English and is counted, not failed.
-const HARD_FAILURE_CHECKS = ['english-byte-identity', 'frontmatter', 'code-fences', 'manifest-coverage', 'translation-freshness']
+const HARD_FAILURE_CHECKS = ['english-byte-identity', 'frontmatter', 'code-fences', 'manifest-coverage', 'translation-freshness', 'intro']
 const HARD_FAILURES = new Set(HARD_FAILURE_CHECKS)
 
 // ---------------------------------------------------------------------------
@@ -187,7 +187,7 @@ function wordCount(text) {
  * (`vibe: ... where "secure by default" isn't just a slide title.`), so it is not
  * a defect and must not fail the build.
  */
-function auditFrontmatter(text) {
+function auditFrontmatter(text, requiredKeys = ['name', 'description', 'emoji']) {
   const problems = []
   const fields = {}
   let present = false
@@ -216,7 +216,10 @@ function auditFrontmatter(text) {
   for (let index = 1; index < closing; index += 1) {
     const line = lines[index]
     if (line.trim() === '' || /^\s/.test(line) || line.trimStart().startsWith('#')) continue
-    const pair = /^([A-Za-z0-9_-]+)\s*:\s*(.*)$/.exec(line)
+    // Tolerate a quoted key ("name": "x"): translators occasionally quote the
+    // key as well as the value, which is harmless YAML-ish and not worth a hard
+    // failure.
+    const pair = /^"?([A-Za-z0-9_-]+)"?\s*:\s*(.*)$/.exec(line)
     if (pair === null) {
       if (line.includes(':')) problems.push(`frontmatter line ${index + 1} is not shaped like "key: value"`)
       continue
@@ -236,12 +239,23 @@ function auditFrontmatter(text) {
     fields[pair[1]] = value
   }
 
-  for (const key of ['name', 'description', 'emoji']) {
+  for (const key of requiredKeys) {
     if (typeof fields[key] !== 'string' || fields[key].trim() === '') problems.push(`frontmatter is missing required key "${key}"`)
   }
 
   return { present, fields, problems, sourceSha256: typeof fields.sourceSha256 === 'string' ? fields.sourceSha256 : null }
 }
+
+// A Chinese file is an expert profile: name, one-line description, and the
+// Chinese introduction that is this project's actual deliverable. The persona
+// body that follows is OPTIONAL - when present it is a full translation and is
+// held to the structural mirror rules; when absent the summon falls back to the
+// English persona.
+const ZH_REQUIRED_KEYS = ['name', 'description', 'intro', 'emoji']
+
+// 3-5 sentences covering the role, its strengths and when to call it.
+const INTRO_MIN_CJK = 40
+const INTRO_MAX_CJK = 600
 
 // ---------------------------------------------------------------------------
 // Check 7 / 9 helpers
@@ -445,7 +459,7 @@ async function main() {
 
     // -- 2. frontmatter legality -------------------------------------------
     const enFront = auditFrontmatter(enText)
-    const zhFront = zhText === null ? null : auditFrontmatter(zhText)
+    const zhFront = zhText === null ? null : auditFrontmatter(zhText, ZH_REQUIRED_KEYS)
     for (const problem of enFront.problems) report('error', 'frontmatter', `en: ${problem}`)
     if (zhFront !== null) for (const problem of zhFront.problems) report('error', 'frontmatter', `zh: ${problem}`)
 
@@ -483,52 +497,93 @@ async function main() {
       continue
     }
 
+    // -- intro: this project's deliverable ---------------------------------
+    // Every Chinese profile must introduce the expert in Chinese. Presence is
+    // enforced through ZH_REQUIRED_KEYS; the band here catches a stub or a
+    // pasted essay. The glossary is deliberately NOT applied to an intro: its
+    // scope is derived from the whole English persona, so demanding every term
+    // inside a short summary would be unsatisfiable.
+    const zhHasBody = stripFrontmatter(zhText).trim() !== ''
+    const intro = typeof zhFront.fields.intro === 'string' ? zhFront.fields.intro.trim() : ''
+    const introChars = cjkCount(intro)
+    if (intro !== '' && (introChars < INTRO_MIN_CJK || introChars > INTRO_MAX_CJK)) {
+      report('error', 'intro', `intro is ${introChars} CJK characters, outside ${INTRO_MIN_CJK}-${INTRO_MAX_CJK}`)
+    }
+    if (intro !== '' && intro === (zhFront.fields.description ?? '').trim()) {
+      report('warn', 'intro', 'intro repeats description verbatim instead of introducing the expert')
+    }
+
     // -- 4. translation freshness ------------------------------------------
-    if (zhFront.sourceSha256 === null) {
-      report('error', 'translation-freshness', 'zh frontmatter has no sourceSha256, so freshness cannot be established')
-    } else if (zhFront.sourceSha256 !== actualSha) {
-      report('error', 'translation-freshness', `zh sourceSha256 ${zhFront.sourceSha256.slice(0, 12)} != current en hash ${actualSha.slice(0, 12)}`)
-    }
+    // A stale full translation pairs an old Chinese persona with new English
+    // instructions and would silently mislead the summoned expert, so it is a
+    // hard failure. A stale intro is a documentation nit on one short
+    // paragraph, so it is reported without blocking the release.
+    const stale = zhFront.sourceSha256 === null
+      ? 'zh frontmatter has no sourceSha256, so freshness cannot be established'
+      : (zhFront.sourceSha256 !== actualSha
+        ? `zh sourceSha256 ${zhFront.sourceSha256.slice(0, 12)} != current en hash ${actualSha.slice(0, 12)}`
+        : null)
+    if (stale !== null) report(zhHasBody ? 'error' : 'warn', 'translation-freshness', stale)
 
-    // -- 5. block-level alignment ------------------------------------------
-    // Exact equality, not a ratio floor: the Chinese file is a structural mirror
-    // of the English one, so a translation must neither drop a block nor invent
-    // one. A floor of 0.8 would silently accept a translation missing a fifth of
-    // the document.
-    const blockRatio = enStructure.blocks.length === 0 ? 1 : zhStructure.blocks.length / enStructure.blocks.length
-    if (enStructure.blocks.length !== zhStructure.blocks.length) {
-      report('error', 'block-alignment', `zh has ${zhStructure.blocks.length} top-level blocks against ${enStructure.blocks.length} in en (ratio ${blockRatio.toFixed(2)}); a translation must mirror blocks exactly`)
-    }
-
-    // -- 6. heading level alignment ----------------------------------------
-    const levels = [...new Set([...Object.keys(enStructure.headings), ...Object.keys(zhStructure.headings)])].sort()
-    for (const level of levels) {
-      const enCount = enStructure.headings[level] ?? 0
-      const zhCount = zhStructure.headings[level] ?? 0
-      if (enCount !== zhCount) report('error', 'heading-alignment', `h${level} count differs: en ${enCount} vs zh ${zhCount}`)
-    }
-
-    // -- 7 / 8 / 9 ----------------------------------------------------------
+    // -- 7 / 8 / 9 glossary and prose checks --------------------------------
     const enBody = stripMarkup(stripFrontmatter(enText))
-    const zhBody = stripMarkup(stripFrontmatter(zhText))
     const enPhrases = splitPhrases(enBody)
     const enWords = wordCount(enBody)
-    const zhChars = cjkCount(zhBody)
 
-    const inScope = termIndex.filter((entry) => phraseContains(enPhrases, entry.key))
-    const violations = inScope.filter((entry) => !zhBody.includes(entry.value))
-    for (const violation of violations.slice(0, THRESHOLDS.maxSamplesPerFile)) {
-      report('error', 'glossary', `"${violation.key}" is not rendered with the approved term "${violation.value}"`)
-    }
+    // The structural mirror rules apply only to a file that actually carries a
+    // translated persona: an intro-only profile has no body to align.
+    let blockRatio = null
+    let zhChars = null
+    let lengthRatio = null
+    let zhBlocks = null
+    let zhHeadings = null
+    let glossaryTermsInScope = 0
+    let glossaryViolations = 0
+    let residueSamples = 0
 
-    const lengthRatio = enWords === 0 ? null : zhChars / enWords
-    if (lengthRatio !== null && (lengthRatio < THRESHOLDS.lengthRatioMin || lengthRatio > THRESHOLDS.lengthRatioMax)) {
-      report('error', 'length-ratio', `zh/en ratio ${lengthRatio.toFixed(2)} is outside [${THRESHOLDS.lengthRatioMin}, ${THRESHOLDS.lengthRatioMax}] (${zhChars} CJK chars / ${enWords} en words)`)
-    }
+    if (zhHasBody) {
+      // -- 5. block-level alignment ----------------------------------------
+      // Exact equality, not a ratio floor: the Chinese file is a structural
+      // mirror of the English one, so a translation must neither drop a block
+      // nor invent one. A floor of 0.8 would silently accept a translation
+      // missing a fifth of the document.
+      blockRatio = enStructure.blocks.length === 0 ? 1 : zhStructure.blocks.length / enStructure.blocks.length
+      if (enStructure.blocks.length !== zhStructure.blocks.length) {
+        report('error', 'block-alignment', `zh has ${zhStructure.blocks.length} top-level blocks against ${enStructure.blocks.length} in en (ratio ${blockRatio.toFixed(2)}); a translation must mirror blocks exactly`)
+      }
 
-    const residue = findResidue(zhBody)
-    for (const sample of residue.slice(0, THRESHOLDS.maxSamplesPerFile)) {
-      report('error', 'foreign-residue', `leftover English prose: "${sample}"`)
+      // -- 6. heading level alignment --------------------------------------
+      const levels = [...new Set([...Object.keys(enStructure.headings), ...Object.keys(zhStructure.headings)])].sort()
+      for (const level of levels) {
+        const enCount = enStructure.headings[level] ?? 0
+        const zhCount = zhStructure.headings[level] ?? 0
+        if (enCount !== zhCount) report('error', 'heading-alignment', `h${level} count differs: en ${enCount} vs zh ${zhCount}`)
+      }
+
+      const zhBody = stripMarkup(stripFrontmatter(zhText))
+      zhChars = cjkCount(zhBody)
+
+      const inScope = termIndex.filter((entry) => phraseContains(enPhrases, entry.key))
+      const violations = inScope.filter((entry) => !zhBody.includes(entry.value))
+      for (const violation of violations.slice(0, THRESHOLDS.maxSamplesPerFile)) {
+        report('error', 'glossary', `"${violation.key}" is not rendered with the approved term "${violation.value}"`)
+      }
+      glossaryTermsInScope = inScope.length
+      glossaryViolations = violations.length
+
+      lengthRatio = enWords === 0 ? null : zhChars / enWords
+      if (lengthRatio !== null && (lengthRatio < THRESHOLDS.lengthRatioMin || lengthRatio > THRESHOLDS.lengthRatioMax)) {
+        report('error', 'length-ratio', `zh/en ratio ${lengthRatio.toFixed(2)} is outside [${THRESHOLDS.lengthRatioMin}, ${THRESHOLDS.lengthRatioMax}] (${zhChars} CJK chars / ${enWords} en words)`)
+      }
+
+      const residue = findResidue(zhBody)
+      for (const sample of residue.slice(0, THRESHOLDS.maxSamplesPerFile)) {
+        report('error', 'foreign-residue', `leftover English prose: "${sample}"`)
+      }
+      residueSamples = residue.length
+
+      zhBlocks = zhStructure.blocks.length
+      zhHeadings = zhStructure.headings
     }
 
     files.push({
@@ -536,19 +591,21 @@ async function main() {
       division,
       slug,
       status: fileNotes.some((entry) => entry.severity === 'error') ? 'suspect' : 'aligned',
+      profile: zhHasBody ? 'translated' : 'intro-only',
       notes: fileNotes,
       metrics: {
         enWords,
         zhChars,
+        introChars,
         enBlocks: enStructure.blocks.length,
-        zhBlocks: zhStructure.blocks.length,
-        blockRatio: Number(blockRatio.toFixed(3)),
+        zhBlocks,
+        blockRatio: blockRatio === null ? null : Number(blockRatio.toFixed(3)),
         lengthRatio: lengthRatio === null ? null : Number(lengthRatio.toFixed(3)),
         enHeadings: enStructure.headings,
-        zhHeadings: zhStructure.headings,
-        glossaryTermsInScope: inScope.length,
-        glossaryViolations: violations.length,
-        residueSamples: residue.length,
+        zhHeadings,
+        glossaryTermsInScope,
+        glossaryViolations,
+        residueSamples,
       },
     })
   }
@@ -569,14 +626,15 @@ async function main() {
     samples: [...drift.drifted, ...drift.upstreamMissing].slice(0, 20),
   })
   checks.push(summarize(notes, 'manifest-coverage', 'every roster entry has a manifest record'))
-  checks.push(summarize(notes, 'frontmatter', 'frontmatter is legal: name / description / emoji present, quotes and fences balanced'))
+  checks.push(summarize(notes, 'frontmatter', 'frontmatter is legal: name / description / intro / emoji present, quotes and fences balanced'))
+  checks.push(summarize(notes, 'intro', `every Chinese profile introduces its expert in ${INTRO_MIN_CJK}-${INTRO_MAX_CJK} CJK characters`))
   checks.push(summarize(notes, 'code-fences', 'code fences are paired'))
-  checks.push(summarize(notes, 'translation-freshness', 'zh sourceSha256 matches the current en hash'))
-  checks.push(summarize(notes, 'block-alignment', 'top-level block counts are comparable'))
-  checks.push(summarize(notes, 'heading-alignment', 'heading counts match at every level'))
-  checks.push(summarize(notes, 'glossary', 'approved glossary renderings are used consistently'))
-  checks.push(summarize(notes, 'length-ratio', 'zh/en length ratio is inside the accepted band'))
-  checks.push(summarize(notes, 'foreign-residue', 'no leftover English prose remains in zh'))
+  checks.push(summarize(notes, 'translation-freshness', 'zh sourceSha256 is current (hard only when a translated persona body is present)'))
+  checks.push(summarize(notes, 'block-alignment', 'translated bodies mirror the English top-level blocks exactly'))
+  checks.push(summarize(notes, 'heading-alignment', 'translated bodies match heading counts at every level'))
+  checks.push(summarize(notes, 'glossary', 'approved glossary renderings are used consistently in translated bodies'))
+  checks.push(summarize(notes, 'length-ratio', 'translated body length ratio is inside the accepted band'))
+  checks.push(summarize(notes, 'foreign-residue', 'no leftover English prose remains in a translated body'))
   checks.sort((a, b) => a.id.localeCompare(b.id))
 
   // -- piles ----------------------------------------------------------------
@@ -616,6 +674,7 @@ async function main() {
       division: file.division,
       slug: file.slug,
       status: file.status,
+      ...(file.profile === undefined ? {} : { profile: file.profile }),
       notes: file.notes,
       ...(file.metrics === undefined ? {} : { metrics: file.metrics }),
     })),

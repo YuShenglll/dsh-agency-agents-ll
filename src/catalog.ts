@@ -17,15 +17,21 @@ export interface Expert {
   /** Division directory the expert belongs to. */
   readonly division: string
   readonly emoji: string
-  /** Chinese display name; empty when no Chinese file exists yet. */
+  /** Chinese display name; empty when no Chinese profile exists yet. */
   readonly nameZh: string
   /** English display name, from the English tree. */
   readonly nameEn: string
-  /** Chinese one-line description; empty when no Chinese file exists yet. */
+  /** Chinese one-line description; empty when no Chinese profile exists yet. */
   readonly descriptionZh: string
   /** English one-line description. */
   readonly descriptionEn: string
-  /** Whether a Chinese persona file exists for this expert. */
+  /**
+   * Chinese introduction of the expert: what the role is, what it is good at,
+   * and when to call it. This is what the roster shows in Chinese; empty when
+   * no Chinese profile exists yet.
+   */
+  readonly introZh: string
+  /** Whether a Chinese persona body exists, so the prompt can switch to it. */
   readonly translated: boolean
 }
 
@@ -41,10 +47,12 @@ export interface AssetRoots {
 export interface Frontmatter {
   readonly name?: string
   readonly description?: string
+  /** Chinese introduction of the expert; present only in the Chinese tree. */
+  readonly intro?: string
   readonly emoji?: string
-  /** sha256 of the English source this Chinese file was translated from. */
+  /** sha256 of the English source this Chinese file was written from. */
   readonly sourceSha256?: string
-  /** Everything after the closing `---`, trimmed. */
+  /** Everything after the closing `---`, trimmed. Empty for an intro-only profile. */
   readonly body: string
 }
 
@@ -70,7 +78,8 @@ export function parseFrontmatter(raw: string): Frontmatter | undefined {
   const block = match[1] ?? ''
   const body = (match[2] ?? '').trim()
   const get = (key: string): string | undefined => {
-    const found = new RegExp(`^${key}\\s*:\\s*(.*)$`, 'm').exec(block)
+    // Tolerate a quoted key ("name": "x"); the sync gate accepts the same form.
+    const found = new RegExp(`^"?${key}"?\\s*:\\s*(.*)$`, 'm').exec(block)
     if (found === null) return undefined
     let value = (found[1] ?? '').trim()
     const first = value.charAt(0)
@@ -82,6 +91,7 @@ export function parseFrontmatter(raw: string): Frontmatter | undefined {
   return {
     name: get('name'),
     description: get('description'),
+    intro: get('intro'),
     emoji: get('emoji'),
     sourceSha256: get('sourceSha256'),
     body,
@@ -150,7 +160,8 @@ export async function loadCatalog(
         descriptionEn: en.description,
         nameZh: zh?.name ?? '',
         descriptionZh: zh?.description ?? '',
-        translated: zh !== undefined,
+        introZh: zh?.intro ?? '',
+        translated: zh !== undefined && zh.body.trim() !== '',
       })
     }
   }

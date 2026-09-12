@@ -222,7 +222,11 @@ export function apply(ctx: Context, config: Config): void {
       : expert.descriptionEn
   )
 
-  function groupByDivision(list: readonly Expert[], locale: LocaleId): Array<{ division: string; label: string; count: number; names: string[] }> {
+  function groupByDivision(
+    list: readonly Expert[],
+    locale: LocaleId,
+    withDescriptions: boolean,
+  ): Array<{ division: string; label: string; count: number; names: string[]; experts: Array<{ name: string; emoji: string; description: string }> }> {
     const byDivision = new Map<string, Expert[]>()
     for (const expert of list) {
       const bucket = byDivision.get(expert.division)
@@ -231,14 +235,22 @@ export function apply(ctx: Context, config: Config): void {
     }
     return [...byDivision.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([division, group]) => ({
-        division,
-        label: (locale === 'en' ? EN_DIVISION[division] : ZH_DIVISION[division]) ?? division,
-        count: group.length,
-        names: group
-          .sort((a, b) => a.slug.localeCompare(b.slug))
-          .map((expert) => `${expert.emoji !== '' ? `${expert.emoji} ` : ''}${displayName(expert)}`),
-      }))
+      .map(([division, group]) => {
+        const sorted = [...group].sort((a, b) => a.slug.localeCompare(b.slug))
+        return {
+          division,
+          label: (locale === 'en' ? EN_DIVISION[division] : ZH_DIVISION[division]) ?? division,
+          count: sorted.length,
+          names: sorted.map((expert) => `${expert.emoji !== '' ? `${expert.emoji} ` : ''}${displayName(expert)}`),
+          experts: withDescriptions
+            ? sorted.map((expert) => ({
+              name: displayName(expert),
+              emoji: expert.emoji,
+              description: truncate(displayDescription(expert, locale), DESCRIPTION_LIMIT),
+            }))
+            : [],
+        }
+      })
   }
 
   ctx.tools.register(defineTool({
@@ -257,7 +269,7 @@ export function apply(ctx: Context, config: Config): void {
         },
       },
       render: (args, value) => {
-        const groups = value.divisions as Array<{ label: string; count: number; names: string[] }>
+        const groups = value.divisions as Array<{ label: string; count: number; names: string[]; experts: Array<{ name: string; emoji: string; description: string }> }>
         const locale = rosterLocale()
         const query = String(args.division ?? '').trim()
         if (groups.length === 0) {
@@ -268,15 +280,28 @@ export function apply(ctx: Context, config: Config): void {
               : formatHost(locale, 'list.emptyDivision', { division: query }),
           }]
         }
-        const lines = groups.map((group) => formatHost(locale, 'list.group', {
-          division: group.label,
-          count: group.count,
-          names: group.names.join('、'),
-        }))
-        lines.unshift(formatHost(locale, 'list.heading', {
-          total: value.total as number,
-          divisions: groups.length,
-        }))
+        const expanded = query !== ''
+        const lines: string[] = []
+        if (!expanded) {
+          lines.push(formatHost(locale, 'list.heading', { total: value.total as number, divisions: groups.length }))
+        }
+        for (const group of groups) {
+          if (expanded) {
+            lines.push(formatHost(locale, 'list.groupHeading', { division: group.label, count: group.count }))
+            for (const expert of group.experts) {
+              lines.push(formatHost(locale, 'list.expertLine', {
+                name: `${expert.emoji !== '' ? `${expert.emoji} ` : ''}${expert.name}`,
+                description: expert.description,
+              }))
+            }
+          } else {
+            lines.push(formatHost(locale, 'list.group', {
+              division: group.label,
+              count: group.count,
+              names: group.names.join('、'),
+            }))
+          }
+        }
         return [{ type: 'text', text: lines.join('\n') }]
       },
     },
@@ -293,8 +318,64 @@ export function apply(ctx: Context, config: Config): void {
             || (ZH_DIVISION[expert.division] ?? '').includes(query)
             || (EN_DIVISION[expert.division] ?? '').toLowerCase().includes(query)
         })
-      const groups = groupByDivision(filtered, locale)
+      const groups = groupByDivision(filtered, locale, query !== '')
       return { divisions: groups, total: filtered.length }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'describe_expert',
+    description: 'Show one expert\'s profile: their Chinese name, one-line summary, and the Chinese introduction explaining what the role covers and when to call it. Use this to explain an expert to the user, or to decide between experts that look similar in list_experts.',
+    parameters: {
+      expert: { type: 'string', required: true, description: 'Expert name; the Chinese or the English name both work.' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', required: true },
+          nameEn: { type: 'string', required: true },
+          division: { type: 'string', required: true },
+          emoji: { type: 'string', required: true },
+          description: { type: 'string', required: true },
+          intro: { type: 'string', required: true },
+          chinesePersona: { type: 'boolean', required: true },
+          promptLocale: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => {
+        const locale = rosterLocale()
+        const lines = [
+          formatHost(locale, 'profile.heading', {
+            name: `${value.emoji as string} ${value.name as string}`.trim(),
+            division: ((locale === 'en' ? EN_DIVISION : ZH_DIVISION)[value.division as string]) ?? (value.division as string),
+          }),
+          formatHost(locale, 'profile.englishName', { name: value.nameEn as string }),
+          formatHost(locale, 'profile.oneLine', { text: value.description as string }),
+        ]
+        const intro = (value.intro as string).trim()
+        lines.push(formatHost(locale, 'profile.introHeading'))
+        lines.push(intro !== '' ? intro : formatHost(locale, 'profile.introMissing', { fallback: value.description as string }))
+        lines.push(value.chinesePersona as boolean
+          ? formatHost(locale, 'profile.personaProvided')
+          : formatHost(locale, 'profile.personaMissing'))
+        return [{ type: 'text', text: lines.join('\n') }]
+      },
+    },
+    async execute(args) {
+      const locale = rosterLocale()
+      const expert = resolveExpert((await experts()).values(), args.expert, locale)
+      return {
+        name: displayName(expert),
+        nameEn: expert.nameEn,
+        division: expert.division,
+        emoji: expert.emoji,
+        description: displayDescription(expert, locale),
+        intro: expert.introZh,
+        chinesePersona: expert.translated,
+        promptLocale: promptLocale(),
+      }
     },
   }))
 

@@ -33,8 +33,17 @@ const zh = {
   'error.expertFailed': '（失败：{error}）',
   'list.heading': '共 {total} 位可选专家，覆盖 {divisions} 个分区。先说分区名可展开该分区的专家。',
   'list.group': '{division}（{count}）：{names}',
+  'list.groupHeading': '{division}（{count}）',
+  'list.expertLine': '- {name} —— {description}',
   'list.empty': '暂无可召唤的专家。',
   'list.emptyDivision': '没有匹配「{division}」的分区。',
+  'profile.heading': '{name}（{division}）',
+  'profile.englishName': '英文名：{name}',
+  'profile.oneLine': '一句话简介：{text}',
+  'profile.introHeading': '中文简介：',
+  'profile.introMissing': '（这位专家尚未提供中文简介，名册会回退显示英文一句话简介：{fallback}）',
+  'profile.personaProvided': '中文提示词：已提供，切换到中文时使用。',
+  'profile.personaMissing': '中文提示词：未提供，召唤时使用英文原文。',
 } satisfies Record<string, string>
 
 /** Key union of the host dictionary. */
@@ -64,8 +73,17 @@ const en = {
   'error.expertFailed': '(failed: {error})',
   'list.heading': '{total} experts available across {divisions} divisions. Name a division to expand it.',
   'list.group': '{division} ({count}): {names}',
+  'list.groupHeading': '{division} ({count})',
+  'list.expertLine': '- {name} — {description}',
   'list.empty': 'No experts are available.',
   'list.emptyDivision': 'No division matches "{division}".',
+  'profile.heading': '{name} ({division})',
+  'profile.englishName': 'English name: {name}',
+  'profile.oneLine': 'One-line summary: {text}',
+  'profile.introHeading': 'Chinese introduction:',
+  'profile.introMissing': '(No Chinese introduction yet; the roster falls back to the English one-line summary: {fallback})',
+  'profile.personaProvided': 'Chinese persona: provided; used when the prompt language is Chinese.',
+  'profile.personaMissing': 'Chinese persona: not provided; the summon uses the English original.',
 } satisfies Record<HostKey, string>
 
 /**

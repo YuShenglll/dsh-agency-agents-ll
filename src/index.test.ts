@@ -81,9 +81,12 @@ describe('catalog', () => {
       '---\nname: Frontend Developer\ndescription: Builds UIs.\nemoji: 🎨\n---\n\nEnglish persona\n', 'utf8')
     await writeFile(join(zh, 'engineering', 'engineering-frontend-developer.md'),
       '---\nname: 前端开发工程师\ndescription: 负责 Web 前端开发。\nemoji: 🎨\nsourceSha256: deadbeef\n---\n\n中文角色设定\n', 'utf8')
-    // untranslated expert
+    // untranslated expert: profile metadata only, no persona body
     await writeFile(join(en, 'design', 'design-ui-designer.md'),
       '---\nname: UI Designer\ndescription: Designs interfaces.\nemoji: 🖌️\n---\n\nEnglish persona two\n', 'utf8')
+    await mkdir(join(zh, 'design'), { recursive: true })
+    await writeFile(join(zh, 'design', 'design-ui-designer.md'),
+      '---\nname: "UI 设计师"\ndescription: "负责界面设计。"\nintro: "界面设计专家，负责把产品需求落成可用的界面。擅长信息层级、组件规范与视觉一致性，交付设计稿与设计规范。适合在有明确产品目标、需要有人把交互与视觉收口时召唤。"\nemoji: "🖌️"\n---\n', 'utf8')
     // second designer, so a bare "designer" query is genuinely ambiguous
     await writeFile(join(en, 'design', 'design-ux-designer.md'),
       '---\nname: UX Designer\ndescription: Designs flows.\nemoji: 🧭\n---\n\nEnglish persona three\n', 'utf8')
@@ -111,9 +114,20 @@ describe('catalog', () => {
     expect(translated?.nameZh).toBe('前端开发工程师')
     expect(translated?.nameEn).toBe('Frontend Developer')
     expect(translated?.translated).toBe(true)
-    const untranslated = experts.get('design-ui-designer')
+    const untranslated = experts.get('design-ux-designer')
     expect(untranslated?.nameZh).toBe('')
+    expect(untranslated?.introZh).toBe('')
     expect(untranslated?.translated).toBe(false)
+  })
+
+  it('carries a Chinese introduction without requiring a translated persona', async () => {
+    const { experts } = await loadCatalog({ en, zh }, ['engineering', 'design'])
+    const profile = experts.get('design-ui-designer')
+    expect(profile?.nameZh).toBe('UI 设计师')
+    expect(profile?.descriptionZh).toBe('负责界面设计。')
+    expect(profile?.introZh).toContain('界面设计专家')
+    // Intro-only: the roster shows Chinese, but the summon must fall back to English.
+    expect(profile?.translated).toBe(false)
   })
 
   it('normalizes full-width and case when comparing names', () => {

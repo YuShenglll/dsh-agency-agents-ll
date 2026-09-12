@@ -34,8 +34,16 @@ const THRESHOLDS = {
   // 5: Chinese top-level blocks as a share of English top-level blocks.
   minBlockRatio: 0.8,
   // 8: CJK characters / English words.
-  lengthRatioMin: 0.15,
-  lengthRatioMax: 1.2,
+  //
+  // Calibrated on 229 real English→Chinese pairs of this same corpus rather than
+  // guessed. Observed quantiles: p05 0.97, p25 1.39, median 1.69, p75 1.83,
+  // p95 3.67, max 9.63. A faithful translation therefore lands near 1.7, and
+  // the band has to contain that: the earlier [0.15, 1.2] would have rejected
+  // the median. The band below covers roughly p05–p90, so it flags a stub or a
+  // wholesale rewrite without failing ordinary variation.
+  // Re-measure with sync/calibrate-ratio.mjs when the corpus changes.
+  lengthRatioMin: 0.7,
+  lengthRatioMax: 3.2,
   // 9: an ASCII run this many words long, in a paragraph that has no CJK, counts
   // as leftover English prose.
   foreignRunWords: 8,

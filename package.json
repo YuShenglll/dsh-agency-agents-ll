@@ -35,7 +35,9 @@
     "verify": "node scripts/verify.mjs",
     "sync": "node sync/sync.mjs",
     "check": "node sync/checks.mjs",
-    "prepublishOnly": "pnpm build && pnpm test && pnpm verify"
+    "sync:stamp": "node sync/stamp.mjs",
+    "sync:calibrate": "node sync/calibrate-ratio.mjs",
+    "prepublishOnly": "pnpm build && pnpm test && pnpm verify && pnpm check"
   },
   "dsh": {
     "bundle": {

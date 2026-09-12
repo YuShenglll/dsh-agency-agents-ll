@@ -1,0 +1,12 @@
+node_modules/
+lib/
+*.log
+.DS_Store
+Thumbs.db
+.vitest/
+coverage/
+test-results/
+playwright-report/
+
+# Upstream checkouts used by sync/ — re-fetchable, never committed.
+sync/.cache/

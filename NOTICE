@@ -1,0 +1,18 @@
+dsh-agency-agents-ll
+Copyright 2026 dsh-agency-agents-ll contributors
+
+本项目的 TypeScript 源码、构建脚本与项目文档采用 Apache License 2.0。
+
+本项目分发的专家 persona 内容来自以下两个上游项目，继续采用 MIT License：
+
+1. The Agency（英文原文）
+   https://github.com/msitarzewski/agency-agents
+   Copyright (c) 2025 AgentLand Contributors
+
+2. agency-agents-zh（中文翻译与本地化，含 company / hr / legal / supply-chain 分区）
+   https://github.com/jnMetaCode/agency-agents-zh
+   Copyright (c) 2025 Michael Sitarzewski（英文原版）
+   Copyright (c) 2026 jnMetaCode（中文翻译与本地化）
+
+完整 MIT 许可证文本见 assets/en/LICENSE 与 assets/zh/LICENSE。
+同步基线与逐文件校验值记录在 sync/manifest.json。

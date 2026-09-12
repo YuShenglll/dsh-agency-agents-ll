@@ -1,0 +1,6 @@
+# Read and merged into the target profile by `dsh plugin add`.
+# Expert assets ship inside the package; override config.root only when you want
+# to point the roster at an external checkout.
+- insert:
+    - id: agency-agents-ll
+      name: dsh-agency-agents-ll

@@ -53,6 +53,26 @@ check('auto 跟随宿主语言', resolvePromptLocale('auto', 'en') === 'en' && r
 check('显式偏好覆盖宿主语言', resolvePromptLocale('zh', 'en') === 'zh' && resolvePromptLocale('en', 'zh') === 'en')
 check('未知取值回退默认', coercePromptLocale('fr') === 'en' && coercePromptLocale(undefined) === 'en')
 
+// Division display names have exactly one home: src/names.ts. The sync glossary
+// repeats them for translators, so a drift between the two is a gate failure
+// rather than something a reviewer has to notice.
+const { ZH_DIVISION, EN_DIVISION, DIVISIONS } = await import(new URL('../lib/names.js', import.meta.url).href)
+const glossary = JSON.parse(await readFile(new URL('../sync/glossary.json', import.meta.url), 'utf8'))
+const glossaryDivisions = Object.entries(glossary.terms ?? {})
+  .filter(([key]) => key.startsWith('division:'))
+  .map(([key, value]) => [key.slice('division:'.length), value])
+check('分区数量为 18', DIVISIONS.length === 18, String(DIVISIONS.length))
+check(
+  '中英分区显示名一一对应',
+  DIVISIONS.every((division) => ZH_DIVISION[division] !== undefined && EN_DIVISION[division] !== undefined),
+)
+check(
+  'sync 术语表的分区名与 src/names.ts 一致',
+  glossaryDivisions.length === DIVISIONS.length
+    && glossaryDivisions.every(([division, value]) => ZH_DIVISION[division] === value),
+  glossaryDivisions.filter(([division, value]) => ZH_DIVISION[division] !== value).map(([division]) => division).join(', '),
+)
+
 if (failures > 0) {
   console.error(`\n${failures} 项验证失败`)
   process.exit(1)

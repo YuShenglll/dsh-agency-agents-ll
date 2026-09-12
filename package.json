@@ -34,6 +34,7 @@
     "test": "vitest run",
     "verify": "node scripts/verify.mjs",
     "sync": "node sync/sync.mjs",
+    "check": "node sync/checks.mjs",
     "prepublishOnly": "pnpm build && pnpm test && pnpm verify"
   },
   "dsh": {

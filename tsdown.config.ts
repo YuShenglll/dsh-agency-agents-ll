@@ -28,7 +28,7 @@ const ID = 'dsh-agency-agents-ll'
 
 const node: UserConfig = {
   name: ID,
-  entry: { index: 'src/index.ts', contract: 'src/contract.ts' },
+  entry: { index: 'src/index.ts', contract: 'src/contract.ts', names: 'src/names.ts' },
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',

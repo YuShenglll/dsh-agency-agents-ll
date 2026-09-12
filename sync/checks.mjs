@@ -31,8 +31,7 @@ const REPORT_VERSION = 1
 // Tuning knobs. Each is a heuristic, so they live in one place and are echoed into
 // the report for later calibration against real translations.
 const THRESHOLDS = {
-  // 5: Chinese top-level blocks as a share of English top-level blocks.
-  minBlockRatio: 0.8,
+  // 5: block counts must match exactly, so no floor knob exists here.
   // 8: CJK characters / English words.
   //
   // Calibrated on 229 real English→Chinese pairs of this same corpus rather than
@@ -492,9 +491,13 @@ async function main() {
     }
 
     // -- 5. block-level alignment ------------------------------------------
+    // Exact equality, not a ratio floor: the Chinese file is a structural mirror
+    // of the English one, so a translation must neither drop a block nor invent
+    // one. A floor of 0.8 would silently accept a translation missing a fifth of
+    // the document.
     const blockRatio = enStructure.blocks.length === 0 ? 1 : zhStructure.blocks.length / enStructure.blocks.length
-    if (blockRatio < THRESHOLDS.minBlockRatio) {
-      report('error', 'block-alignment', `zh has ${zhStructure.blocks.length} top-level blocks against ${enStructure.blocks.length} in en (ratio ${blockRatio.toFixed(2)})`)
+    if (enStructure.blocks.length !== zhStructure.blocks.length) {
+      report('error', 'block-alignment', `zh has ${zhStructure.blocks.length} top-level blocks against ${enStructure.blocks.length} in en (ratio ${blockRatio.toFixed(2)}); a translation must mirror blocks exactly`)
     }
 
     // -- 6. heading level alignment ----------------------------------------

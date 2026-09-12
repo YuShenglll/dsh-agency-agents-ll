@@ -3,7 +3,7 @@
   "upstream": {
     "repo": "https://github.com/msitarzewski/agency-agents",
     "commit": "ad9264e309bd5e5422c04784372d7841b1e5d604",
-    "fetchedAt": "2026-09-12T18:48:52.749Z",
+    "fetchedAt": "2026-09-12T18:54:14.206Z",
     "source": "default",
     "divisions": {
       "academic": {
@@ -102,7 +102,7 @@
     "academic/academic-anthropologist": {
       "enSha256": "2668602164abf574cb4e432a0cd40727a943de0b59864abb5b73956a0eb26146",
       "bytes": 7878,
-      "zhState": "missing",
+      "zhState": "stale",
       "zhSourceSha256": null
     },
     "academic/academic-geographer": {
@@ -246,7 +246,7 @@
     "engineering/engineering-code-reviewer": {
       "enSha256": "7509fcc3ea1dda46511b2801996305bf3d4a125576f9655ff0b63df25602f446",
       "bytes": 3076,
-      "zhState": "missing",
+      "zhState": "stale",
       "zhSourceSha256": null
     },
     "engineering/engineering-codebase-onboarding-engineer": {
@@ -990,7 +990,7 @@
     "marketing/marketing-short-video-editing-coach": {
       "enSha256": "4634520ab5e84b26bb6658f4f8c0f737ed7dd0b5c631b9211482a4cf4037ccbf",
       "bytes": 30779,
-      "zhState": "missing",
+      "zhState": "stale",
       "zhSourceSha256": null
     },
     "marketing/marketing-social-media-strategist": {
@@ -1104,7 +1104,7 @@
     "product/product-manager": {
       "enSha256": "4a3fe4661e72e5173877bcba7c362392181774b20efc27ac1789171e98676c9d",
       "bytes": 22687,
-      "zhState": "missing",
+      "zhState": "stale",
       "zhSourceSha256": null
     },
     "product/product-sprint-prioritizer": {
@@ -1164,7 +1164,7 @@
     "research/research-synthesist": {
       "enSha256": "3618b4a2a73523147731ae38ac4096cea0e83a7de930f55ea9ea6c69e3c77f30",
       "bytes": 10739,
-      "zhState": "missing",
+      "zhState": "stale",
       "zhSourceSha256": null
     },
     "sales/sales-account-strategist": {
@@ -1278,7 +1278,7 @@
     "security/security-senior-secops": {
       "enSha256": "90b535077cff7253bf18355ec99d5205dbe09c9f3e93f5b85222183460f2b879",
       "bytes": 31340,
-      "zhState": "missing",
+      "zhState": "stale",
       "zhSourceSha256": null
     },
     "security/security-threat-detection-engineer": {
@@ -1777,8 +1777,8 @@
   "totals": {
     "agents": 279,
     "divisions": 18,
-    "zhMissing": 279,
+    "zhMissing": 273,
     "zhCurrent": 0,
-    "zhStale": 0
+    "zhStale": 6
   }
 }

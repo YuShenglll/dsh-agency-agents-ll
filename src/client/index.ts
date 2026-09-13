@@ -231,10 +231,9 @@ export function buildLexicon(experts: readonly ExpertSummary[], enabled: Readonl
 
 const CSS = `
 .aall-section{box-sizing:border-box;display:flex;flex-direction:column;gap:16px;width:100%;max-width:880px;margin:0 auto;padding:0 0 32px;color:var(--dsw-alias-label-primary)}
-.aall-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px}
+.aall-head{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px}
 .aall-head-text{flex:1 1 260px;min-width:0}
-.aall-title{margin:0;font-size:20px;line-height:28px;font-weight:650}
-.aall-subtitle{margin:6px 0 0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px}
+.aall-title{margin:0;font-size:20px;line-height:32px;font-weight:650}
 .aall-summary{margin:8px 0 0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .aall-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-left:auto}
 .aall-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 12px;border:1px solid transparent;border-radius:8px;background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);font:inherit;font-size:13px;font-weight:550;cursor:pointer}
@@ -248,7 +247,7 @@ const CSS = `
 .aall-field-narrow{flex:0 1 200px}
 .aall-label{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:16px}
 .aall-control{box-sizing:border-box;width:100%;min-height:34px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px}
-.aall-segmented{display:inline-flex;padding:2px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
+.aall-segmented{align-self:flex-start;display:inline-flex;padding:2px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
 .aall-segment{min-height:28px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;cursor:pointer}
 .aall-segment[aria-pressed="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font-weight:600}
 .aall-error{color:var(--dsw-alias-state-error-primary);font-size:13px;line-height:20px}
@@ -321,8 +320,34 @@ function lineIcon(size: number, path: string): React.ReactElement {
   }, React.createElement('path', { d: path }))
 }
 
+/**
+ * A solid glyph. Sparkles read as a blob when stroked at label size, so the
+ * summon mark is filled instead of joining the stroked set above.
+ * @param size - square edge in px.
+ * @param path - the glyph outline.
+ * @returns the icon element.
+ */
+function solidIcon(size: number, path: string): React.ReactElement {
+  return React.createElement('svg', {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'currentColor',
+    'aria-hidden': true,
+    focusable: false,
+  }, React.createElement('path', { d: path }))
+}
+
+/**
+ * Summon mark: one four-point sparkle with a small companion.
+ *
+ * The quadratic control points sit close to the centre, which is what pulls the
+ * waist concave; a straight-line star reads as a plain asterisk instead.
+ * @returns the icon element.
+ */
 function SparkIcon(): React.ReactElement {
-  return lineIcon(14, 'M12 3l1.7 3.6L17.3 8.3l-3.6 1.7L12 13.6l-1.7-3.6L6.7 8.3l3.6-1.7z')
+  return solidIcon(15, 'M9.8 2.4Q11.3 9.7 18.6 11.2Q11.3 12.7 9.8 20Q8.3 12.7 1 11.2Q8.3 9.7 9.8 2.4Z'
+    + 'M19.4 13.6Q20 17 23 17.6Q20 18.2 19.4 21.6Q18.8 18.2 15.8 17.6Q18.8 17 19.4 13.6Z')
 }
 
 function CopyIcon(): React.ReactElement {
@@ -440,7 +465,7 @@ function ComposerButton(props: ComposerProps): React.ReactElement {
       title: props.t('menu.title'),
       'aria-expanded': open,
       onClick: () => { setError(null); setOpen((current) => !current) },
-    }, React.createElement(SparkIcon, null), React.createElement('span', null, props.t('menu.title'))),
+    }, React.createElement(SparkIcon, null), React.createElement('span', null, props.t('menu.button'))),
     open
       ? React.createElement('div', { className: 'aall-menu', role: 'menu' },
         error === null ? null : React.createElement('div', { className: 'aall-error', role: 'alert' }, error),
@@ -934,7 +959,6 @@ function RosterSection(props: SectionProps): React.ReactElement {
     React.createElement('div', { className: 'aall-head' },
       React.createElement('div', { className: 'aall-head-text' },
         React.createElement('h2', { className: 'aall-title' }, t('title')),
-        React.createElement('p', { className: 'aall-subtitle' }, t('subtitle')),
         React.createElement('p', { className: 'aall-summary' },
           `${t('summary.total').replace('{total}', String(experts.length))} · ${t('summary.enabled').replace('{enabled}', String(enabled.size))} · ${t('badge.custom')} ${customCount}`)),
       React.createElement('div', { className: 'aall-actions' },

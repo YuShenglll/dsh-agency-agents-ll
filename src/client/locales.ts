@@ -28,9 +28,8 @@ function enDivisions(): Record<DivisionKey, string> {
 
 const zh = {
   ...zhDivisions(),
-  'nav': '双语专家名册',
-  'title': '双语专家名册',
-  'subtitle': '中文名与中文简介始终显示；只有人设提示词会跟随语言切换。',
+  'nav': '专家库',
+  'title': '专家库',
   'loading': '正在读取名册…',
   'empty': '名册为空。请确认插件资产目录存在。',
   'emptyFilter': '没有匹配的专家。试试换个关键词，或清除筛选。',
@@ -94,6 +93,7 @@ const zh = {
   'error.load': '读取名册失败：{detail}',
   'error.save': '保存失败：{detail}',
   'error.render': '专家名册页面渲染失败，已就地还原而不是清空整页。请把下面这行发给维护者：{detail}',
+  'menu.button': '专家',
   'menu.title': '召唤专家',
   'menu.empty': '还没有启用任何专家。请先在设置页启用。',
   'error.conflict': '专家配置已被其他窗口修改，已为您刷新，请重试。',
@@ -108,9 +108,8 @@ export type AgencyClientKey = keyof typeof zh
 
 const en = {
   ...enDivisions(),
-  'nav': 'Bilingual experts',
-  'title': 'Bilingual experts',
-  'subtitle': 'Chinese names and introductions always show; only the persona text follows the language switch.',
+  'nav': 'Expert library',
+  'title': 'Expert library',
   'loading': 'Loading the roster…',
   'empty': 'The roster is empty. Check that the plugin assets are present.',
   'emptyFilter': 'No matching experts. Try another keyword, or clear the filters.',
@@ -174,6 +173,7 @@ const en = {
   'error.load': 'Could not load the roster: {detail}',
   'error.save': 'Could not save: {detail}',
   'error.render': 'The roster page failed while rendering and was contained instead of blanking the panel. Please send this line to the maintainer: {detail}',
+  'menu.button': 'Expert',
   'menu.title': 'Summon expert',
   'menu.empty': 'No experts are enabled yet. Enable some in Settings first.',
   'error.conflict': 'Expert settings were changed in another window; the roster was refreshed, please retry.',

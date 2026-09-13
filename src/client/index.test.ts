@@ -144,7 +144,7 @@ function createRemote(experts: ExpertSummary[]): FakeRemote {
 }
 
 /** Mount the plugin against a fake client context and hand back the page. */
-async function mount(remote: FakeRemote): Promise<{ component: React.ComponentType<Record<string, unknown>>; t: (key: string) => string }> {
+async function mount(remote: FakeRemote): Promise<{ component: React.ComponentType<Record<string, unknown>>; t: (key: string) => string; options: Record<string, unknown> }> {
   const registered: Array<{ options: Record<string, unknown>; component: React.ComponentType<Record<string, unknown>> }> = []
   const t = (key: string): string => (DICTIONARIES.zh as Record<string, string>)[key] ?? key
 
@@ -182,7 +182,7 @@ async function mount(remote: FakeRemote): Promise<{ component: React.ComponentTy
 
   const entry = registered.find((item) => item.options.name === 'settings.section')
   if (entry === undefined) throw new Error('the settings section was never registered')
-  return { component: entry.component, t }
+  return { component: entry.component, t, options: entry.options }
 }
 
 describe('roster settings page', () => {
@@ -287,6 +287,48 @@ describe('roster settings page against the shipped roster', () => {
   })
 })
 
+describe('roster page presentation', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => { root.unmount() })
+    container.remove()
+  })
+
+  it('is called "专家库" in the settings navigation', async () => {
+    const remote = createRemote(roster())
+    const { options } = await mount(remote)
+    const label = options.label as (() => string) | undefined
+    expect(label?.(), 'the settings entry name').toBe('专家库')
+  })
+
+  it('shows the title, the count and the actions, with no subtitle line', async () => {
+    const remote = createRemote(roster())
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    expect(container.querySelector('.aall-title')?.textContent).toBe('专家库')
+    expect(container.querySelector('.aall-subtitle'), 'the subtitle line was removed').toBeNull()
+    expect(container.querySelector('.aall-summary')?.textContent).toContain('共 279 位专家')
+    expect(container.querySelector('.aall-actions')?.textContent).toContain('新建自定义专家')
+  })
+
+  it('reads its label and tooltip from two separate dictionary keys', () => {
+    // The button shows the short name; the tooltip keeps the fuller phrasing.
+    expect(DICTIONARIES.zh['menu.button']).toBe('专家')
+    expect(DICTIONARIES.zh['menu.title']).toBe('召唤专家')
+    expect(DICTIONARIES.zh['nav']).toBe('专家库')
+  })
+})
+
 describe('roster page stays usable while a write is in flight', () => {
   let container: HTMLDivElement
   let root: Root
@@ -370,7 +412,10 @@ describe('roster page stays usable while a write is in flight', () => {
   })
 
   it('contains a render failure instead of letting the panel go blank', async () => {
-    // React logs the caught error itself; the noise is not the assertion.
+    // React re-dispatches a caught error as a DOM error event so DevTools can
+    // see it; jsdom would report that as an uncaught exception. Claim it here.
+    const claim = (event: Event): void => { event.preventDefault() }
+    window.addEventListener('error', claim)
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     const broken = roster()
     broken[0] = { ...broken[0]!, intro: undefined as unknown as string }
@@ -379,6 +424,7 @@ describe('roster page stays usable while a write is in flight', () => {
     const { component, t } = await mount(remote)
     await act(async () => { root.render(React.createElement(component, { t })) })
     logged.mockRestore()
+    window.removeEventListener('error', claim)
 
     const alert = container.querySelector('.aall-error')
     expect(alert, 'a thrown render must surface as a message, not an empty panel').not.toBeNull()

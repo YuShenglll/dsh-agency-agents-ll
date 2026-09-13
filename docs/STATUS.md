@@ -590,7 +590,7 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 
 工作流的 shell 逻辑用**桩 `gh`** 在本地 Git bash 里跑了五个用例，断言每次的调用序列：无 issue 时 create；正文相同则**不 edit**（否则每天骚扰你一次）；正文不同才 edit；名册没变时 close；都没有则什么都不做。YAML 用 pnpm store 里的 `js-yaml` 解析并断言了结构（两个分支条件互斥且完整、`probe` 步骤确实写 `GITHUB_OUTPUT`）。
 
-**唯一没验的是工作流本身在 GitHub 上真跑** —— 那要等它按 cron 自己触发，或手动 Run workflow 一次。
+**工作流本身也已在 GitHub 上真跑过**（手动 dispatch 两次）：`watch in 6s` / `9s`（run `34762632756`、`34762673007`），日志里是 `upstream:check 退出码 = 0`、未开 issue、未改任何东西。第一次跑带出 `actions/checkout@v4` / `setup-node@v4` 的 **Node 20 弃用注解**，已升到 `@v7` 并复跑确认注解消失。job 里钉 Node 22 是刻意的 —— 它是 `engines` 的下限，在最老的受支持版本上跑通才说明脚本没有偷偷依赖新版本。
 
 ## 6. 环境要点（重开会话必读）
 

@@ -32,7 +32,7 @@
 
 ```
 pnpm build   exit=0      （typecheck：avatars:inline + 两份 tsconfig；然后 tsdown）
-pnpm test    105 passed  （roster-settings 17 + remote 16 + host 38 + client/jsdom 34）
+pnpm test    107 passed  （roster-settings 17 + remote 16 + host 40 + client/jsdom 34）
 pnpm verify  exit=0      35 项
 pnpm check   exit=0      13 项，roster 279 / aligned 279 / suspect 0 / missing 0
 pnpm authoring exit=0    0 项待办
@@ -655,6 +655,35 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 
 **门禁现状见第 2 节。**
 
+## 5.19 系统提示段落：让名册可被发现（2026-09-14）
+
+**缺口**：4 个工具一直都在、一直都可用，但**没有任何东西告诉模型名册存在**——它们只是一长串工具里的 4 个 schema，于是实践中只有用户在输入框 `@` 某位专家才会真的发生召唤。grep 全 `src/` 可确认：这个插件**从来没有**往系统提示里写过任何东西（唯一提到 `system-prompt` 的地方是 `persona.ts` 的一句 JSDoc）。
+
+**它原本打算做这件事**：最初的 `inject` 列表里写着 `systemPrompt`，还 import 了它的类型——但从未实现。5.18 整改时它被当成死代码删掉了（理由充分：全文件没人用）。本节把它恢复，并补上实现。
+
+**设计决定（用户明确要求）**：**只在用户明确要求时才搜索和召唤专家。** 不要"这个任务看起来属于某个专业领域"式的自作主张。理由是成本：一次召唤 = 一次完整的子代理运行，花时间也花额度。
+
+**实现**：
+
+| 项 | 取值 / 做法 |
+|---|---|
+| 段落名 | `agency-agents-ll:roster`（带命名空间，避免与其他插件撞名） |
+| 排序 | `getSectionOrder('TOOL_SUBAGENT')` = 2800 —— 紧挨子代理工具，因为这段话讲的就是"那个工具什么时候允许跑" |
+| 文本 | **provider 函数**而非固定字符串，所以每次组装时按界面语言实时取值 |
+| 语言 | zh / en 两份都在 `i18n.ts`，由 key 集对等门禁保证不缺 |
+
+**文本里除了"名册在哪"，还必须写清三条"不要"**：不要自作主张召唤；不要为纯事实查询 / 小改动 / 需要快速来回迭代的事召唤；**评审类召唤必须给对方留「说没问题」的余地**。最后这条是两轮评审的直接教训——共提出约 43 条，其中 5 条经复核不成立，成因之一就是"必须交出一份完整评审"的压力。
+
+**证据**：
+
+1. **自动测试**（`src/index.test.ts` 新增 2 条）：断言段落被注册、排序为 2800、文本含关键约束、且**跟着界面语言变**；
+2. **真机**：用户在 **3 个全新会话**里分别测试三个场景，行为均符合预期——不要求就不召唤，明确要求才搜索；
+3. **段落确实进了系统提示**：可以在 agent 自己的系统提示里直接读到它，位置正好落在 ralph 与"子代理后台运行"两段之间，即 order 2800 处。
+
+> **自动测试与真机测试的差别值得记一笔**：测试只能断言"这段文字被注册了"，**测不出"模型是否照做"**。后者只有新会话里的真实行为能证明——旧会话的上下文里可能已经有别的理由让模型知道名册存在。
+
+**DSH 本体没有被修改**：这段提示是插件通过 `ctx.systemPrompt.section()` 这个**公开接口**在运行时投进去的，`app.asar` 的最后修改时间仍是 2026-09-10。所以：停用插件 → 提示立刻消失；改措辞 → 只改 `src/i18n.ts` 再重建；`lltest` profile 装了同一个插件，那边同样生效。
+
 ## 6. 环境要点（重开会话必读）
 
 - **`core.autocrlf = true`（系统级 gitconfig 的默认值）会把 checkout 出来的文件写成 CRLF，而 `git status` 看不出来。** 见 5.16。`assets/en`、`assets/zh` 已用 `.gitattributes` 钉成 `-text`，但**其它文件仍会被转换** —— 今后任何「对字节有契约」的新目录都要一起钉住。要判断磁盘真实字节就用 `[System.IO.File]::ReadAllBytes`，别问 git。另外 `git checkout -- <file>` 对 git 认为「干净」的文件是**空操作**（这正是当时没能把它改回来的原因），要强制重写必须先删掉再 checkout，或者用 `-c core.autocrlf=false`。
@@ -689,7 +718,7 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 ```powershell
 cd G:\dsh\dsh-agency-agents-ll
 pnpm build              # typecheck + tsdown（Host ESM / 客户端 ModuleLoader CJS）
-pnpm exec vitest run    # 105 项：roster-settings 17 + remote 16 + host 38 + 客户端 jsdom 34
+pnpm exec vitest run    # 107 项：roster-settings 17 + remote 16 + host 40 + 客户端 jsdom 34
 pnpm verify             # 35 项发布门禁
 pnpm check              # 13 项机械门禁 → sync/report.json
 pnpm sync               # 拉上游英文资产、刷新 manifest（幂等，离线）

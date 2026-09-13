@@ -94,6 +94,8 @@ pnpm check                         # 8 12 项机械门禁，应为 roster=N / al
 所以：**想知道上游有没有新专家，就跑 `pnpm sync:upstream`**（它会 fetch）。
 `pnpm sync` 保持离线是刻意的——同一个命令在没有网络的机器上仍然产出同样的字节。
 
+**不要用 `git checkout` 去还原 `assets/en` 里的文件。** `core.autocrlf = true`（Git for Windows 的默认值）会把 checkout 出来的文件写成 CRLF，而 `git status` 看不出来、`english-byte-identity` 会红。要还原就重跑 `pnpm sync` —— 它按上游的字节覆盖。根因与修法见 [`STATUS.md`](STATUS.md) 5.16。
+
 ## 6. 这套流程是怎么验证的
 
 在一个临时目录里搭了一套带 bare 远端的模拟上游（`robocopy` 出真实上游工作树 → `git init` →

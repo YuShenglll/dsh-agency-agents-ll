@@ -32,10 +32,13 @@
 
 ```
 pnpm build   exit=0
-pnpm test    60 passed   （remote 13 + host 24 + client/jsdom 23）
+pnpm test    63 passed   （remote 13 + host 24 + client/jsdom 26）
 pnpm verify  exit=0      34 项
 pnpm check   exit=0      12 项，roster 279 / aligned 279 / suspect 0 / missing 0
+pnpm authoring exit=0    0 项待办
 ```
+
+> 另有一套不在 `pnpm` 脚本里的一致性验证：**全新 clone 后 `assets/en` 279 个文件必须与上游逐字节一致**。这条以前是坏的，见 5.16。
 
 
 ## 3. 已实测的端到端路径
@@ -506,8 +509,65 @@ DSH 看到的就是仓库本身。剩下的唯一问题是**重建后 DSH 会不
 - **`& $exe script.mjs` 对 GUI 子系统程序不等待。** 第一次跑驱动时输出为空、`$LASTEXITCODE` 是 0，看起来像「驱动没输出且成功」，实际是 pwsh 提前走人、子进程被掐死在「已 `git merge` 完但还没拷文件」的中间态 —— checkout 被移动了，`assets/en` 却没动。**要等就用 `Start-Process -NoNewWindow -Wait -PassThru -RedirectStandardOutput <文件>`**，日志再用 read 工具看（`Get-Content` 会把 UTF-8 中文按 ANSI 解成乱码）。
 - **`Select-Object -First N` 会提前掐断上游管道**，把被包装的进程一起杀掉，于是退出码变成 1、输出被截断。要么 `-Last N`，要么先赋值给变量。
 
+## 5.16 仓库被 git 悄悄改成 CRLF，门禁全红（2026-09-13）
+
+5.15 的验证过程中，为还原被模拟上游改动的文件跑了 `git checkout -- assets/en`。之后 `git status` 说工作区干净，`pnpm check` 却报：
+
+```
+HARD FAILURES (3):
+  [english-byte-identity] engineering/engineering-backend-architect: en hash 1e7c00a9867b differs from the manifest baseline 18f237d054fa
+  [english-byte-identity] engineering/engineering-backend-architect: en is 11164 bytes, the manifest recorded 10928
+  [english-byte-identity] engineering/engineering-backend-architect: en no longer matches the upstream checkout; re-run pnpm sync
+```
+
+**根因**：`core.autocrlf = true`，来源是**系统级** gitconfig（`C:/Program Files/Git/etc/gitconfig`）—— 也就是 Git for Windows 的默认值。`git checkout` 会把 blob 里的 LF 写成 CRLF。而 `git status` **看不见**：它比较时会把 CRLF 归一化回 LF。于是「看起来干净、字节全错」。
+
+**这不只是还原时手滑。** 决定性验证是把仓库 clone 到干净目录再量 `assets/en`：
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| clone 后含 CRLF 的英文资产 | **279 / 279** | 0 / 279 |
+| 与上游大小不符 | **264 / 279** | 0 / 279 |
+| clone 里 `pnpm check` | **exit 1** | exit 0 |
+
+也就是说：**仓库当时的状态，在任何标准 Windows Git 上 clone 下来都过不了自己的门禁。** 只有本机这个工作区是好的 —— 因为 `assets/en` 是 `sync.mjs` 用 `copyFile` 拷进去的，绕过了 git，而 `git checkout` 一旦碰过其中某个文件就会把它变成 CRLF。
+
+### 修法
+
+新增 `.gitattributes`，把两棵资产树钉成 `-text`：
+
+```
+assets/en/** -text
+assets/zh/** -text
+```
+
+**必须是 `-text`，不能是 `eol=lf`。** 上游本来就有 15 个文件是 CRLF；`eol=lf` 会把它们翻成 LF，反而破坏要保护的那个「逐字节一致」。`-text` 的含义是「原样，两个方向都不转换」。
+
+顺带用 `git add --renormalize .` 把两个 `LICENSE` 重新入库：它们的 blob 之前是 LF、磁盘是 CRLF（commit 时被归一化掉了），现在 blob 与上游逐字节相同。
+
+### 同一病根的第二处：`sameManifest`
+
+`sync/sync.mjs` 头部声明「连跑两次磁盘不变」，做法是剥掉 `fetchedAt` 再比字符串：
+
+```js
+text.replace(/"fetchedAt": "[^"]*",\n/, '')
+```
+
+`git checkout` 写出来的文件是 CRLF，`,\r\n` 匹配不上这个模式 → 内容其实没变的 manifest 被判为「变了」并重写。修法是比较前先归一化行尾：
+
+```js
+const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*",\n/, '')
+```
+
+**已实测**：把 manifest 人为弄成 CRLF（83104 字节）后跑 `pnpm sync`，前后 sha256 完全相同（`2F352AAA24ABFAA0…`）；修复前它会重写。
+
+### 教训
+
+`git status` 干净**不等于**磁盘字节没被 git 动过。只要文件带哈希或字节一致性契约，就必须把它从 git 的行尾转换里摘出来，而且验证方式必须是**量字节**，不是问 `git status`。这个缺陷是被「模拟上游之后还原」这个动作顺手炸出来的 —— 如果没做那次演练，它会一直潜伏到某台新机器 clone 时才爆。
+
 ## 6. 环境要点（重开会话必读）
 
+- **`core.autocrlf = true`（系统级 gitconfig 的默认值）会把 checkout 出来的文件写成 CRLF，而 `git status` 看不出来。** 见 5.16。`assets/en`、`assets/zh` 已用 `.gitattributes` 钉成 `-text`，但**其它文件仍会被转换** —— 今后任何「对字节有契约」的新目录都要一起钉住。要判断磁盘真实字节就用 `[System.IO.File]::ReadAllBytes`，别问 git。另外 `git checkout -- <file>` 对 git 认为「干净」的文件是**空操作**（这正是当时没能把它改回来的原因），要强制重写必须先删掉再 checkout，或者用 `-c core.autocrlf=false`。
 - **`node` / `npm` 不在 PATH。** `pnpm`（11.8.0）与 `node` 都由 DSH Desktop 的 runtime shim 提供。
 - **⚠️ 不要用 `pnpm` / `node` 的 `.cmd` shim 跑命令 —— 会弹出可见的 CMD 窗口，打断用户用电脑。**
   实测（2026-09-13，用户报告后测得）：一轮完整门禁走 `pnpm.cmd` 会拉起 **11 个 `cmd.exe` / 7 个 `conhost.exe`，其中 1 个带可见窗口**。静置对照是 0。
@@ -538,7 +598,9 @@ pnpm build              # typecheck + tsdown（Host ESM / 客户端 ModuleLoader
 pnpm exec vitest run    # 60 项：remote 13 + host 24 + 客户端 jsdom 23
 pnpm verify             # 34 项发布门禁
 pnpm check              # 12 项机械门禁 → sync/report.json
-pnpm sync               # 拉上游英文资产、刷新 manifest（幂等）
+pnpm sync               # 拉上游英文资产、刷新 manifest（幂等，离线）
+pnpm sync:upstream      # 上游更新一条龙：fetch+快进 -> 同步 -> 待办清单 -> 12 项门禁
+pnpm authoring          # 只看待办：还需要人工补写哪些中文档案/头像（见 UPDATE.md）
 pnpm sync:stamp         # 为中文档案盖 sourceSha256（从磁盘推导）
 pnpm sync:calibrate     # 用本项目自己的译文对重测长度比区间
 pnpm avatars            # 重新生成 docs/AVATARS.md（头像规格 + 279 行清单）

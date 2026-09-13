@@ -80,6 +80,40 @@ export function acceptEnabled(remote: AgencyRosterRemote, value: { enabled: stri
 }
 
 /**
+ * Observable pair for one Remote face, cached by face identity.
+ *
+ * `useSyncExternalStore` resubscribes whenever the `subscribe` reference moves,
+ * so a component that builds these inline churns one unsubscribe/resubscribe
+ * pair per render — and every extra listener lengthens the notification loop of
+ * every later write. The pair is therefore minted once per face.
+ */
+export interface CatalogSubscription {
+  /** Observe snapshot replacements. */
+  readonly subscribe: (listener: () => void) => () => void
+  /** Current snapshot; the same reference until the roster moves. */
+  readonly getSnapshot: () => CatalogState
+}
+
+const subscriptions = new WeakMap<AgencyRosterRemote, CatalogSubscription>()
+
+/**
+ * Stable observable pair for one Remote face.
+ * @param remote - mounted Remote face.
+ * @returns the cached pair.
+ */
+export function catalogSubscription(remote: AgencyRosterRemote): CatalogSubscription {
+  let entry = subscriptions.get(remote)
+  if (entry === undefined) {
+    entry = {
+      subscribe: (listener) => subscribeCatalog(remote, listener),
+      getSnapshot: () => catalogState(remote),
+    }
+    subscriptions.set(remote, entry)
+  }
+  return entry
+}
+
+/**
  * Read the roster, coalescing concurrent readers onto one request.
  * @param remote - mounted Remote face.
  * @returns the accepted snapshot.

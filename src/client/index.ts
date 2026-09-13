@@ -35,7 +35,7 @@ import {
   type CustomExpertInput,
   type ExpertSummary,
 } from '../expert-contract.js'
-import { acceptCatalog, catalogState, refreshCatalog, subscribeCatalog, writeEnabled } from './catalog.js'
+import { acceptCatalog, catalogState, catalogSubscription, refreshCatalog, subscribeCatalog, writeEnabled } from './catalog.js'
 import { DICTIONARIES, formatClient, type AgencyClientKey } from './locales.js'
 import type { AgencyRosterRemote } from './remote.js'
 import TYPERT_REMOTE from './remote.js'
@@ -151,19 +151,6 @@ export function groupByDivision(experts: readonly ExpertSummary[], locale: Clien
     groups.push({ division, label: groupLabel(division, locale), experts: [...members].sort((a, b) => a.slug.localeCompare(b.slug)) })
   }
   return groups
-}
-
-/**
- * Move enabled experts to the front without reordering either half.
- * @param experts - entries to order.
- * @param enabled - enabled slugs.
- * @returns a new array.
- */
-export function sortByEnabled(experts: readonly ExpertSummary[], enabled: ReadonlySet<string>): ExpertSummary[] {
-  const on: ExpertSummary[] = []
-  const off: ExpertSummary[] = []
-  for (const expert of experts) (enabled.has(expert.slug) ? on : off).push(expert)
-  return [...on, ...off]
 }
 
 /**
@@ -283,8 +270,8 @@ const CSS = `
 .aall-badge{padding:1px 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
 .aall-intro{margin:8px 0 0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:21px;white-space:pre-wrap}
 .aall-description{margin:6px 0 0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
-.aall-switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
-.aall-switch-input{position:absolute;width:1px;height:1px;opacity:0}
+.aall-switch{position:relative;align-self:start;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.aall-switch-input{position:absolute;inset:0;width:1px;height:1px;margin:0;padding:0;opacity:0;pointer-events:none}
 .aall-switch-track{position:relative;display:block;width:40px;height:22px;border:1px solid var(--dsw-alias-border-l3);border-radius:11px;background:var(--dsw-alias-bg-layer-3);transition:background 160ms ease,border-color 160ms ease}
 .aall-switch-track::after{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--dsw-alias-label-secondary);content:"";transition:transform 160ms ease,background 160ms ease}
 .aall-switch-input:checked+.aall-switch-track{border-color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 32%,transparent)}
@@ -629,17 +616,105 @@ interface SectionProps extends PropsLocale<'agencyLL'> {
   readonly promptLocaleScope: PromptLocaleScope
 }
 
+/** No card is mid-write. Shared so the empty case keeps one reference. */
+const NO_PENDING: ReadonlySet<string> = new Set<string>()
+
+/**
+ * The page's own failure floor.
+ *
+ * `settings.section` is one slot entry, and the renderer retires an entry whose
+ * component throws — permanently, for the life of the page. Catching here keeps
+ * one bad render a visible message instead of an empty settings panel.
+ */
+class SectionBoundary extends React.Component<
+  { readonly t: SectionProps['t']; readonly onError: (error: Error) => void; readonly children?: React.ReactNode },
+  { readonly error: Error | null }
+> {
+  override state: { readonly error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error): { readonly error: Error | null } {
+    return { error }
+  }
+
+  override componentDidCatch(error: Error): void {
+    this.props.onError(error)
+  }
+
+  override render(): React.ReactNode {
+    const { error } = this.state
+    if (error === null) return this.props.children
+    const detail = `${error.name}: ${error.message}`
+    return React.createElement('div', { className: 'aall-error', role: 'alert' }, this.props.t('error.render').replace('{detail}', detail))
+  }
+}
+
+/** One roster row. Memoized: a write re-renders its own card, not all 279. */
+interface CardProps {
+  readonly expert: ExpertSummary
+  readonly on: boolean
+  readonly pending: boolean
+  readonly copied: boolean
+  readonly locale: ClientLocale
+  readonly t: SectionProps['t']
+  readonly onToggle: (expert: ExpertSummary) => void
+  readonly onView: (expert: ExpertSummary) => void
+  readonly onCopy: (expert: ExpertSummary) => void
+  readonly onEdit: (expert: ExpertSummary) => void
+  readonly onDelete: (expert: ExpertSummary) => void
+}
+
+const RosterCard = React.memo(function RosterCard(props: CardProps): React.ReactElement {
+  const { expert, on, t } = props
+  const label = t(on ? 'toggle.disable' : 'toggle.enable')
+  return React.createElement('div', { className: 'aall-card', 'data-enabled': on },
+    React.createElement('div', { className: 'aall-card-body' },
+      React.createElement('div', { className: 'aall-emoji', 'aria-hidden': true }, expert.emoji),
+      React.createElement('div', { className: 'aall-identity' },
+        React.createElement('div', { className: 'aall-name' },
+          React.createElement('span', null, expert.name),
+          expert.nameEn === expert.name ? null : React.createElement('span', { className: 'aall-name-en' }, expert.nameEn)),
+        React.createElement('div', { className: 'aall-division' }, groupLabel(expert.division, props.locale)),
+        React.createElement('div', { className: 'aall-badges' },
+          expert.custom ? React.createElement('span', { className: 'aall-badge' }, t('badge.custom')) : null,
+          React.createElement('span', { className: 'aall-badge' }, t(expert.translated ? 'badge.translated' : 'badge.notTranslated')),
+          expert.conflict ? React.createElement('span', { className: 'aall-badge' }, t('badge.conflict')) : null),
+        React.createElement('p', { className: 'aall-intro' },
+          React.createElement('strong', null, `${t('card.introHeading')}: `),
+          expert.intro.trim() === '' ? t('card.introMissing') : expert.intro),
+        React.createElement('p', { className: 'aall-description' }, expert.description)),
+      React.createElement('label', { className: 'aall-switch', title: label },
+        React.createElement('input', {
+          type: 'checkbox',
+          className: 'aall-switch-input',
+          checked: on,
+          disabled: props.pending || expert.conflict,
+          'aria-label': `${label} ${expert.name}`,
+          onChange: () => { props.onToggle(expert) },
+        }),
+        React.createElement('span', { className: 'aall-switch-track' }),
+        React.createElement('span', { className: 'aall-label' }, t(on ? 'enabled' : 'disabled')))),
+    React.createElement('div', { className: 'aall-card-foot' },
+      React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onView(expert) } },
+        React.createElement(EyeIcon, null), React.createElement('span', null, t('card.viewPrompt'))),
+      React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onCopy(expert) } },
+        React.createElement(CopyIcon, null), React.createElement('span', null, t(props.copied ? 'card.copied' : 'card.copyPrompt'))),
+      React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onEdit(expert) } },
+        t(expert.custom ? 'custom.edit' : 'custom.add')),
+      expert.custom
+        ? React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onDelete(expert) } }, t('custom.delete'))
+        : null))
+})
+
 function RosterSection(props: SectionProps): React.ReactElement {
   const { t } = props
   const locale = props.locale()
-  const state = React.useSyncExternalStore(
-    (listener) => subscribeCatalog(props.remote, listener),
-    () => catalogState(props.remote),
-  )
+  const subscription = catalogSubscription(props.remote)
+  const state = React.useSyncExternalStore(subscription.subscribe, subscription.getSnapshot)
   const [loading, setLoading] = React.useState(state.snapshot === undefined)
   const [query, setQuery] = React.useState('')
   const [division, setDivision] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [pending, setPending] = React.useState<ReadonlySet<string>>(NO_PENDING)
   const [error, setError] = React.useState<string | null>(null)
   const [note, setNote] = React.useState<string | null>(null)
   const [preference, setPreference] = React.useState<CatalogSnapshot['promptLocale']>('en')
@@ -675,7 +750,42 @@ function RosterSection(props: SectionProps): React.ReactElement {
   const experts = snapshot?.experts ?? []
   const enabled = state.enabled
 
-  /** Run one revision-fenced write; a tripped fence reloads the roster instead. */
+  /** A tripped revision fence reloads the roster instead of retrying blind. */
+  const handleFailure = React.useCallback((cause: unknown): void => {
+    if (!isConflict(cause)) {
+      fail('error.save', cause)
+      return
+    }
+    void refreshCatalog(props.remote).then(
+      () => { setError(t('error.conflict')) },
+      () => { setError(t('error.conflict.refreshFailed')) },
+    )
+  }, [props.remote, fail, t])
+
+  const markSettled = React.useCallback((slug: string): void => {
+    setPending((prev) => {
+      if (!prev.has(slug)) return prev
+      const next = new Set(prev)
+      next.delete(slug)
+      return next
+    })
+  }, [])
+
+  /**
+   * Queue one card write. Writes run in click order and each reads the revision
+   * at its own turn, so clicking three experts in a row enables all three
+   * instead of dropping the ones that raced.
+   */
+  const queue = React.useRef<Promise<unknown>>(Promise.resolve())
+  const enqueue = React.useCallback((slug: string, work: () => Promise<void>): void => {
+    setPending((prev) => new Set(prev).add(slug))
+    queue.current = queue.current.then(work).then(
+      () => { markSettled(slug) },
+      (cause: unknown) => { markSettled(slug); handleFailure(cause) },
+    )
+  }, [markSettled, handleFailure])
+
+  /** Page-level write: only the header, the filters and the dialogs go busy. */
   const runWrite = React.useCallback(async (work: () => Promise<void>): Promise<void> => {
     if (saving.current) return
     saving.current = true
@@ -684,29 +794,23 @@ function RosterSection(props: SectionProps): React.ReactElement {
     try {
       await work()
     } catch (cause: unknown) {
-      if (isConflict(cause)) {
-        try {
-          await refreshCatalog(props.remote)
-          setError(t('error.conflict'))
-        } catch {
-          setError(t('error.conflict.refreshFailed'))
-        }
-      } else {
-        fail('error.save', cause)
-      }
+      handleFailure(cause)
     } finally {
       saving.current = false
       setBusy(false)
     }
-  }, [props.remote, fail, t])
+  }, [handleFailure])
 
-  const toggle = (expert: ExpertSummary): void => {
-    if (snapshot === undefined) return
-    const next = new Set(enabled)
-    if (next.has(expert.slug)) next.delete(expert.slug)
-    else next.add(expert.slug)
-    void runWrite(async () => { await writeEnabled(props.remote, next, snapshot.revision) })
-  }
+  const toggle = React.useCallback((expert: ExpertSummary): void => {
+    enqueue(expert.slug, async () => {
+      const current = catalogState(props.remote)
+      if (current.snapshot === undefined) return
+      const next = new Set(current.enabled)
+      if (next.has(expert.slug)) next.delete(expert.slug)
+      else next.add(expert.slug)
+      await writeEnabled(props.remote, next, current.revision)
+    })
+  }, [props.remote, enqueue])
 
   const readPrompt = async (expert: ExpertSummary): Promise<PromptView> => {
     const result = await props.remote.getPrompt(expert.slug, expert.division)
@@ -719,14 +823,16 @@ function RosterSection(props: SectionProps): React.ReactElement {
     }
   }
 
-  const viewPrompt = (expert: ExpertSummary): void => {
+  const viewPrompt = React.useCallback((expert: ExpertSummary): void => {
     void runWrite(async () => {
       setPromptView({ title: t('prompt.title').replace('{name}', expert.name), body: t('prompt.loading'), note: null })
       setPromptView(await readPrompt(expert))
     })
-  }
+  // readPrompt closes over props.remote and t only; both are stable per face.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runWrite, props.remote, t])
 
-  const copyPrompt = (expert: ExpertSummary): void => {
+  const copyPrompt = React.useCallback((expert: ExpertSummary): void => {
     void runWrite(async () => {
       const view = await readPrompt(expert)
       try {
@@ -736,25 +842,27 @@ function RosterSection(props: SectionProps): React.ReactElement {
         setNote(t('card.copyFailed'))
       }
     })
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runWrite, props.remote, t])
 
-  const openEditor = (expert?: ExpertSummary): void => {
-    if (snapshot === undefined) return
+  const openEditor = React.useCallback((expert?: ExpertSummary): void => {
+    const current = catalogState(props.remote)
+    if (current.snapshot === undefined) return
     setEditorError(null)
     if (expert === undefined) {
       setEditor({
         draft: { name: '', description: '', division: DIVISION_ORDER[0] ?? 'engineering', emoji: DEFAULT_EXPERT_EMOJI, intro: '', prompt: '' },
         enabled: true,
-        revision: snapshot.revision,
+        revision: current.snapshot.revision,
       })
       return
     }
     void runWrite(async () => {
       const result = await props.remote.getCustomExpert(expert.slug)
       if (!result.ok) throw new Error(result.error.message)
-      setEditor({ draft: result.value, enabled: enabled.has(expert.slug), revision: snapshot.revision })
+      setEditor({ draft: result.value, enabled: current.enabled.has(expert.slug), revision: current.snapshot?.revision ?? current.revision })
     })
-  }
+  }, [props.remote, runWrite])
 
   const saveEditor = (): void => {
     if (editor === null) return
@@ -776,7 +884,8 @@ function RosterSection(props: SectionProps): React.ReactElement {
   const removeExpert = (expert: ExpertSummary): void => {
     if (snapshot === undefined) return
     void runWrite(async () => {
-      const result = await props.remote.deleteCustomExpert(expert.slug, snapshot.revision)
+      const current = catalogState(props.remote)
+      const result = await props.remote.deleteCustomExpert(expert.slug, current.revision)
       if (!result.ok) throw new Error(result.error.message)
       acceptCatalog(props.remote, result.value)
       setPendingDelete(null)
@@ -799,50 +908,27 @@ function RosterSection(props: SectionProps): React.ReactElement {
         React.createElement('button', { type: 'button', className: 'aall-btn', onClick: load }, t('retry'))))
   }
 
+  // Roster order, deliberately: re-sorting enabled entries to the front moved
+  // rows out from under the pointer on every write. Enabled state is carried by
+  // the switch, the card border and the summary count instead.
   const filtered = filterExperts(experts, division, query)
-  const groups = groupByDivision(sortByEnabled(filtered, enabled), locale)
+  const groups = groupByDivision(filtered, locale)
   const customCount = experts.filter((expert) => expert.custom).length
 
-  const card = (expert: ExpertSummary): React.ReactElement => {
-    const on = enabled.has(expert.slug)
-    return React.createElement('div', { key: expert.slug, className: 'aall-card', 'data-enabled': on },
-      React.createElement('div', { className: 'aall-card-body' },
-        React.createElement('div', { className: 'aall-emoji', 'aria-hidden': true }, expert.emoji),
-        React.createElement('div', { className: 'aall-identity' },
-          React.createElement('div', { className: 'aall-name' },
-            React.createElement('span', null, expert.name),
-            expert.nameEn === expert.name ? null : React.createElement('span', { className: 'aall-name-en' }, expert.nameEn)),
-          React.createElement('div', { className: 'aall-division' }, groupLabel(expert.division, locale)),
-          React.createElement('div', { className: 'aall-badges' },
-            expert.custom ? React.createElement('span', { className: 'aall-badge' }, t('badge.custom')) : null,
-            React.createElement('span', { className: 'aall-badge' }, t(expert.translated ? 'badge.translated' : 'badge.notTranslated')),
-            expert.conflict ? React.createElement('span', { className: 'aall-badge' }, t('badge.conflict')) : null),
-          React.createElement('p', { className: 'aall-intro' },
-            React.createElement('strong', null, `${t('card.introHeading')}: `),
-            expert.intro.trim() === '' ? t('card.introMissing') : expert.intro),
-          React.createElement('p', { className: 'aall-description' }, expert.description)),
-        React.createElement('label', { className: 'aall-switch', title: t(on ? 'toggle.disable' : 'toggle.enable') },
-          React.createElement('input', {
-            type: 'checkbox',
-            className: 'aall-switch-input',
-            checked: on,
-            disabled: busy || expert.conflict,
-            'aria-label': `${t(on ? 'toggle.disable' : 'toggle.enable')} ${expert.name}`,
-            onChange: () => { toggle(expert) },
-          }),
-          React.createElement('span', { className: 'aall-switch-track' }),
-          React.createElement('span', { className: 'aall-label' }, t(on ? 'enabled' : 'disabled')))),
-      React.createElement('div', { className: 'aall-card-foot' },
-        React.createElement('button', { type: 'button', className: 'aall-link', disabled: busy, onClick: () => { viewPrompt(expert) } },
-          React.createElement(EyeIcon, null), React.createElement('span', null, t('card.viewPrompt'))),
-        React.createElement('button', { type: 'button', className: 'aall-link', disabled: busy, onClick: () => { copyPrompt(expert) } },
-          React.createElement(CopyIcon, null), React.createElement('span', null, t(copied === expert.slug ? 'card.copied' : 'card.copyPrompt'))),
-        React.createElement('button', { type: 'button', className: 'aall-link', disabled: busy, onClick: () => { openEditor(expert) } },
-          t(expert.custom ? 'custom.edit' : 'custom.add')),
-        expert.custom
-          ? React.createElement('button', { type: 'button', className: 'aall-link', disabled: busy, onClick: () => { setPendingDelete(expert) } }, t('custom.delete'))
-          : null))
-  }
+  const card = (expert: ExpertSummary): React.ReactElement => React.createElement(RosterCard, {
+    key: expert.slug,
+    expert,
+    on: enabled.has(expert.slug),
+    pending: pending.has(expert.slug),
+    copied: copied === expert.slug,
+    locale,
+    t,
+    onToggle: toggle,
+    onView: viewPrompt,
+    onCopy: copyPrompt,
+    onEdit: openEditor,
+    onDelete: setPendingDelete,
+  })
 
   return React.createElement('div', { className: 'aall-section' },
     React.createElement('div', { className: 'aall-head' },
@@ -960,24 +1046,23 @@ export function apply(ctx: ClientContext): void {
    * Mount the Remote contribution in this plugin's own fiber. Reading
    * `ctx.remote.agencyAgents` before mounting would require injecting a service
    * that does not exist yet, which deadlocks the plugin.
+   * @returns whether a Remote face is now available.
    */
-  const mountRemote = async (): Promise<void> => {
+  const mountRemote = async (): Promise<boolean> => {
     const dispose = await ctx.remote.$mount(TYPERT_REMOTE)
     const mounted = ctx.get('remote.agencyAgents') as AgencyRosterRemote | undefined
     if (mounted === undefined) {
       ctx.logger.warn('[agency-agents-ll] the agencyAgents Remote namespace did not mount')
       await dispose()
-      return
+      return false
     }
     remote = mounted
     ctx.effect(() => () => { void dispose() }, `${PLUGIN_ID}: remote contribution`)
     await refreshCatalog(mounted).catch((cause: unknown) => {
       ctx.logger.warn('[agency-agents-ll] the initial roster read failed; the settings page can retry', cause)
     })
+    return true
   }
-  void mountRemote().catch((cause: unknown) => {
-    ctx.logger.warn('[agency-agents-ll] mounting the Remote contribution failed', cause)
-  })
 
   /** Insert the reference through the session the slot belongs to. */
   const bindInsertion = (sessionId?: SessionId): { readonly insertReference: (reference: ReferenceInsert) => boolean } => ({
@@ -991,75 +1076,96 @@ export function apply(ctx: ClientContext): void {
     ),
   })
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register(
-    { name: 'settings.section', id: SECTION_ID, order: 24, label: () => t('nav'), locale: NS },
-    (props: PropsLocale<'agencyLL'>) => React.createElement(RosterSection, {
-      ...props,
-      remote: rosterRemote(),
-      locale,
-      promptLocaleScope,
-    }),
-  ))
+  /**
+   * Every contribution needs a mounted Remote face, so nothing is registered
+   * before one exists. Registering first and looking the face up during render
+   * would make a not-yet-mounted service a render-time throw — and a render-time
+   * throw retires the slot entry for the life of the page.
+   */
+  const registerContributions = (): void => {
+    const reportRenderFailure = (error: Error): void => {
+      ctx.logger.warn(`[${PLUGIN_ID}] the roster page failed to render`, error)
+    }
 
-  ctx.slots.inject('conversation.input.left', () => ctx.slots.register(
-    {
-      name: 'conversation.input.left',
-      id: PLUGIN_ID,
-      order: 0,
-      locale: NS,
-      // The slot injects the owning session id, so the button writes into the
-      // composer it is rendered next to rather than into "the current" one.
-      inject: bindInsertion,
-    },
-    (props: PropsLocale<'agencyLL'> & { readonly insertReference?: (reference: ReferenceInsert) => boolean }) => React.createElement(ComposerButton, {
-      ...props,
-      remote: rosterRemote(),
-      locale,
-    }),
-  ))
+    ctx.slots.inject('settings.section', () => ctx.slots.register(
+      { name: 'settings.section', id: SECTION_ID, order: 24, label: () => t('nav'), locale: NS },
+      (props: PropsLocale<'agencyLL'>) => React.createElement(SectionBoundary, {
+        t: props.t,
+        onError: reportRenderFailure,
+      }, React.createElement(RosterSection, {
+        ...props,
+        remote: rosterRemote(),
+        locale,
+        promptLocaleScope,
+      })),
+    ))
 
-  ctx.effect(() => ctx.inputTriggers.registerSource({
-    trigger: '@',
-    name: `${PLUGIN_ID}:@`,
-    order: 200,
-    showGroupTitle: true,
-    candidates: async (_session, request) => {
-      const current = await refreshCatalog(rosterRemote()).catch(() => undefined)
-      if (current?.snapshot === undefined) return []
-      const needle = normalizeQuery(request.query ?? '')
-      return current.snapshot.experts
-        .filter((expert) => current.enabled.has(expert.slug) && matchesQuery(expert, needle))
-        .map((expert) => ({
-          name: candidateName(expert),
-          description: expert.intro === '' ? expert.description : expert.intro.slice(0, 80),
-          hint: expert.slug,
-          section: groupLabel(expert.division, locale()),
-        }))
-    },
-    onPick: (pick) => {
-      const current = catalogState(rosterRemote())
-      const slug = pick.candidate.hint ?? ''
-      const expert = current.snapshot?.experts.find((item) => item.slug === slug)
-      if (expert === undefined || !current.enabled.has(slug)) return undefined
-      return { insert: buildReference(expert, locale()) }
-    },
-    warm: () => { void refreshCatalog(rosterRemote()).catch(() => undefined) },
-    lexicon: () => {
-      const current = catalogState(rosterRemote())
-      return current.snapshot === undefined ? undefined : buildLexicon(current.snapshot.experts, current.enabled)
-    },
-    subscribeLexicon: (_session, listener) => subscribeCatalog(rosterRemote(), listener),
-    codec: {
-      clipboardText: (ref) => mentionText(
-        catalogState(rosterRemote()).snapshot?.experts.find((expert) => expert.slug === ref),
-        locale(),
-      ),
-      serialize: async (ref) => {
-        const current = await refreshCatalog(rosterRemote())
-        const expert = current.snapshot?.experts.find((item) => item.slug === ref)
-        if (expert === undefined || !current.enabled.has(ref)) throw new Error(t('error.unavailable'))
-        return mentionText(expert, locale())
+    ctx.slots.inject('conversation.input.left', () => ctx.slots.register(
+      {
+        name: 'conversation.input.left',
+        id: PLUGIN_ID,
+        order: 0,
+        locale: NS,
+        // The slot injects the owning session id, so the button writes into the
+        // composer it is rendered next to rather than into "the current" one.
+        inject: bindInsertion,
       },
-    },
-  }), `${PLUGIN_ID}: @ source`)
+      (props: PropsLocale<'agencyLL'> & { readonly insertReference?: (reference: ReferenceInsert) => boolean }) => React.createElement(ComposerButton, {
+        ...props,
+        remote: rosterRemote(),
+        locale,
+      }),
+    ))
+
+    ctx.effect(() => ctx.inputTriggers.registerSource({
+      trigger: '@',
+      name: `${PLUGIN_ID}:@`,
+      order: 200,
+      showGroupTitle: true,
+      candidates: async (_session, request) => {
+        const current = await refreshCatalog(rosterRemote()).catch(() => undefined)
+        if (current?.snapshot === undefined) return []
+        const needle = normalizeQuery(request.query ?? '')
+        return current.snapshot.experts
+          .filter((expert) => current.enabled.has(expert.slug) && matchesQuery(expert, needle))
+          .map((expert) => ({
+            name: candidateName(expert),
+            description: expert.intro === '' ? expert.description : expert.intro.slice(0, 80),
+            hint: expert.slug,
+            section: groupLabel(expert.division, locale()),
+          }))
+      },
+      onPick: (pick) => {
+        const current = catalogState(rosterRemote())
+        const slug = pick.candidate.hint ?? ''
+        const expert = current.snapshot?.experts.find((item) => item.slug === slug)
+        if (expert === undefined || !current.enabled.has(slug)) return undefined
+        return { insert: buildReference(expert, locale()) }
+      },
+      warm: () => { void refreshCatalog(rosterRemote()).catch(() => undefined) },
+      lexicon: () => {
+        const current = catalogState(rosterRemote())
+        return current.snapshot === undefined ? undefined : buildLexicon(current.snapshot.experts, current.enabled)
+      },
+      subscribeLexicon: (_session, listener) => subscribeCatalog(rosterRemote(), listener),
+      codec: {
+        clipboardText: (ref) => mentionText(
+          catalogState(rosterRemote()).snapshot?.experts.find((expert) => expert.slug === ref),
+          locale(),
+        ),
+        serialize: async (ref) => {
+          const current = await refreshCatalog(rosterRemote())
+          const expert = current.snapshot?.experts.find((item) => item.slug === ref)
+          if (expert === undefined || !current.enabled.has(ref)) throw new Error(t('error.unavailable'))
+          return mentionText(expert, locale())
+        },
+      },
+    }), `${PLUGIN_ID}: @ source`)
+  }
+
+  void mountRemote().then((mounted) => {
+    if (mounted) registerContributions()
+  }).catch((cause: unknown) => {
+    ctx.logger.warn('[agency-agents-ll] mounting the Remote contribution failed; no UI was registered', cause)
+  })
 }

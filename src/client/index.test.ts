@@ -1,0 +1,387 @@
+// @vitest-environment jsdom
+/**
+ * Roster page behaviour, driven through the real registration path.
+ *
+ * The fixture is deliberately the shipped shape — 279 experts across 18
+ * divisions with full-length Chinese introductions — because the failure this
+ * spec exists for only appears once the page is carrying the real volume.
+ */
+import { resolve } from 'node:path'
+import React from 'react'
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DIVISIONS } from '../names.js'
+import { loadCatalog } from '../catalog.js'
+import { toExpertSummary } from '../roster-settings.js'
+import type { CatalogSnapshot, ExpertSummary } from '../expert-contract.js'
+import { apply } from './index.js'
+import { DICTIONARIES } from './locales.js'
+
+/** The shipped asset trees, read exactly as the Host reads them. */
+const ASSET_ROOT = {
+  en: resolve(process.cwd(), 'assets/en'),
+  zh: resolve(process.cwd(), 'assets/zh'),
+}
+
+/** The real roster, through the same projection the Host serves. */
+async function shippedRoster(): Promise<ExpertSummary[]> {
+  const { experts } = await loadCatalog(ASSET_ROOT, DIVISIONS)
+  return [...experts.values()].map(toExpertSummary)
+}
+
+/** The subset of the Remote face the page uses, with a controllable revision. */
+interface FakeRemote {
+  calls: string[]
+  revision: number
+  enabled: string[]
+  catalog: CatalogSnapshot
+  failNextWrite: boolean
+  /** Hold every `setEnabled` until {@link FakeRemote.release} is called. */
+  hold(): void
+  release(): void
+  getCatalog(): Promise<{ ok: true; value: CatalogSnapshot }>
+  setEnabled(enabled: string[], expectedRevision: number): Promise<{ ok: true; value: { enabled: string[]; revision: number } } | { ok: false; error: { code: string; message: string } }>
+  getPrompt(slug: string, division: string): Promise<{ ok: true; value: { prompt: string; locale: 'zh' | 'en'; fallback: boolean } }>
+  getCustomExpert(slug: string): Promise<{ ok: false; error: { code: string; message: string } }>
+  getEnabled(): Promise<{ ok: true; value: { enabled: string[]; revision: number } }>
+  getPromptLocale(): Promise<{ ok: true; value: { promptLocale: CatalogSnapshot['promptLocale']; revision: number } }>
+  saveCustomExpert(): Promise<{ ok: false; error: { code: string; message: string } }>
+  deleteCustomExpert(): Promise<{ ok: false; error: { code: string; message: string } }>
+}
+
+/** One synthetic expert, sized like a real roster entry. */
+function expert(index: number, division: string, slug: string): ExpertSummary {
+  const intro = `这位专家负责第 ${index} 项工作，覆盖从问题定义到结论交付的完整链路。`
+    + '他习惯先把边界画清楚，再逐项核对证据，最后给出可执行的结论与风险清单。'
+    + '当你要处理的正是这一类问题时，就该找他。'
+  return {
+    slug,
+    division,
+    emoji: '🧭',
+    name: `专家${index}`,
+    nameEn: `Expert ${index}`,
+    description: `第 ${index} 位专家的一句话说明。`,
+    descriptionEn: `One-line description for expert ${index}.`,
+    intro,
+    translated: false,
+    custom: false,
+    conflict: false,
+  }
+}
+
+/** A realistic roster: every division populated, 279 entries in total. */
+function roster(): ExpertSummary[] {
+  const out: ExpertSummary[] = []
+  const perDivision = Math.floor(279 / DIVISIONS.length)
+  for (const [divisionIndex, division] of DIVISIONS.entries()) {
+    const size = divisionIndex === DIVISIONS.length - 1 ? 279 - out.length : perDivision
+    for (let i = 0; i < size; i += 1) {
+      out.push(expert(out.length + 1, division, `${division}-expert-${String(i).padStart(2, '0')}`))
+    }
+  }
+  return out
+}
+
+function createRemote(experts: ExpertSummary[]): FakeRemote {
+  let gate: (() => void) | undefined
+  let held: Promise<void> = Promise.resolve()
+  const remote: FakeRemote = {
+    calls: [],
+    revision: 7,
+    enabled: [],
+    failNextWrite: false,
+    hold() {
+      held = new Promise<void>((resolve) => { gate = resolve })
+    },
+    release() {
+      gate?.()
+      gate = undefined
+      held = Promise.resolve()
+    },
+    catalog: undefined as unknown as CatalogSnapshot,
+    async getCatalog() {
+      remote.calls.push('getCatalog')
+      return { ok: true, value: remote.catalog }
+    },
+    async setEnabled(enabled, expectedRevision) {
+      remote.calls.push('setEnabled')
+      await held
+      if (remote.failNextWrite) {
+        remote.failNextWrite = false
+        return { ok: false, error: { code: 'internal', message: 'boom' } }
+      }
+      if (expectedRevision !== remote.revision) {
+        return { ok: false, error: { code: 'conflict', message: 'revision moved' } }
+      }
+      remote.revision += 1
+      remote.enabled = enabled
+      remote.catalog = { ...remote.catalog, enabled, revision: remote.revision }
+      return { ok: true, value: { enabled, revision: remote.revision } }
+    },
+    async getPrompt(_slug, _division) {
+      remote.calls.push('getPrompt')
+      return { ok: true, value: { prompt: 'PERSONA BODY', locale: 'en', fallback: true } }
+    },
+    async getCustomExpert() {
+      return { ok: false, error: { code: 'missing', message: 'not custom' } }
+    },
+    async getEnabled() {
+      return { ok: true, value: { enabled: remote.enabled, revision: remote.revision } }
+    },
+    async getPromptLocale() {
+      return { ok: true, value: { promptLocale: 'en', revision: remote.revision } }
+    },
+    async saveCustomExpert() {
+      return { ok: false, error: { code: 'invalid', message: 'not supported' } }
+    },
+    async deleteCustomExpert() {
+      return { ok: false, error: { code: 'missing', message: 'not supported' } }
+    },
+  }
+  remote.catalog = { experts, enabled: [], revision: remote.revision, promptLocale: 'en' }
+  return remote
+}
+
+/** Mount the plugin against a fake client context and hand back the page. */
+async function mount(remote: FakeRemote): Promise<{ component: React.ComponentType<Record<string, unknown>>; t: (key: string) => string }> {
+  const registered: Array<{ options: Record<string, unknown>; component: React.ComponentType<Record<string, unknown>> }> = []
+  const t = (key: string): string => (DICTIONARIES.zh as Record<string, string>)[key] ?? key
+
+  const ctx = {
+    effect: (run: () => unknown) => run(),
+    logger: { warn: () => {} },
+    locale: {
+      register: () => () => {},
+      bind: () => t,
+      getSnapshot: () => ({ active: 'zh', revision: 1 }),
+    },
+    settingsScope: {
+      bind: () => ({ getSnapshot: () => ({ value: { promptLocale: 'en' as const } }), set: async () => {} }),
+    },
+    slots: {
+      inject: (name: string, callback: () => unknown) => {
+        if (name === 'settings.section') callback()
+      },
+      register: (options: Record<string, unknown>, component: React.ComponentType<Record<string, unknown>>) => {
+        registered.push({ options, component })
+        return () => {}
+      },
+    },
+    remote: { $mount: async () => async () => {} },
+    inputTriggers: { registerSource: () => () => {} },
+    get: () => remote,
+  }
+
+  apply(ctx as unknown as Parameters<typeof apply>[0])
+  // Registration is deferred until the Remote face is mounted, so the fake
+  // context needs its microtask queue drained before the section exists.
+  for (let tick = 0; tick < 8; tick += 1) {
+    await act(async () => { await Promise.resolve() })
+  }
+
+  const entry = registered.find((item) => item.options.name === 'settings.section')
+  if (entry === undefined) throw new Error('the settings section was never registered')
+  return { component: entry.component, t }
+}
+
+describe('roster settings page', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => { root.unmount() })
+    container.remove()
+  })
+
+  it('renders the whole roster', async () => {
+    const remote = createRemote(roster())
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    const cards = container.querySelectorAll('.aall-card')
+    expect(cards.length).toBe(279)
+    expect(container.querySelectorAll('.aall-group').length).toBe(18)
+  })
+
+  it('keeps the page alive across consecutive enables', async () => {
+    const remote = createRemote(roster())
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    const toggleAt = async (index: number): Promise<void> => {
+      const input = container.querySelectorAll<HTMLInputElement>('.aall-card .aall-switch-input')[index]
+      if (input === undefined) throw new Error(`no toggle at ${index}`)
+      await act(async () => { input.click(); await Promise.resolve(); await Promise.resolve() })
+    }
+
+    await toggleAt(1)
+    expect(remote.enabled.length).toBe(1)
+    expect(container.querySelectorAll('.aall-card').length, 'after the second expert was enabled').toBe(279)
+
+    await toggleAt(2)
+    expect(remote.enabled.length).toBe(2)
+    expect(container.querySelectorAll('.aall-card').length, 'after the third expert was enabled').toBe(279)
+
+    const stuck = [...container.querySelectorAll<HTMLInputElement>('.aall-switch-input')].filter((input) => input.disabled)
+    expect(stuck.length, 'every toggle must be clickable again once the write settles').toBe(0)
+  })
+})
+
+describe('roster settings page against the shipped roster', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => { root.unmount() })
+    container.remove()
+  })
+
+  it('renders every shipped expert with its Chinese introduction', async () => {
+    const experts = await shippedRoster()
+    expect(experts.length).toBe(279)
+
+    const remote = createRemote(experts)
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    expect(container.querySelectorAll('.aall-card').length).toBe(279)
+    const missing = [...container.querySelectorAll('.aall-intro')].filter((node) => node.textContent?.includes('尚未提供中文简介'))
+    expect(missing.length, 'every shipped expert must carry an introduction').toBe(0)
+  })
+
+  it('survives enabling the second and third shipped expert', async () => {
+    const experts = await shippedRoster()
+    const remote = createRemote(experts)
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    const toggleAt = async (index: number): Promise<void> => {
+      const input = container.querySelectorAll<HTMLInputElement>('.aall-card .aall-switch-input')[index]
+      if (input === undefined) throw new Error(`no toggle at ${index}`)
+      expect(input.disabled, `toggle ${index} must be clickable`).toBe(false)
+      await act(async () => { input.click(); await Promise.resolve(); await Promise.resolve() })
+    }
+
+    await toggleAt(1)
+    expect(container.querySelectorAll('.aall-card').length).toBe(279)
+    await toggleAt(2)
+    expect(container.querySelectorAll('.aall-card').length).toBe(279)
+
+    const stuck = [...container.querySelectorAll<HTMLInputElement>('.aall-switch-input')].filter((input) => input.disabled)
+    expect(stuck.length, 'no toggle may be left disabled after the write settles').toBe(0)
+  })
+})
+
+describe('roster page stays usable while a write is in flight', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => { root.unmount() })
+    container.remove()
+  })
+
+  /** Render the shipped roster and hand back the toggles. */
+  const openPage = async (remote: FakeRemote): Promise<HTMLInputElement[]> => {
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+    return [...container.querySelectorAll<HTMLInputElement>('.aall-card .aall-switch-input')]
+  }
+
+  const click = async (input: HTMLInputElement): Promise<void> => {
+    await act(async () => { input.click() })
+  }
+
+  const settle = async (): Promise<void> => {
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
+  }
+
+  /** Drain microtasks until `done` holds, so a spec never asserts mid-write. */
+  const waitFor = async (done: () => boolean): Promise<void> => {
+    for (let tick = 0; tick < 20 && !done(); tick += 1) await settle()
+  }
+
+  const disabledCount = (): number =>
+    [...container.querySelectorAll<HTMLInputElement>('.aall-switch-input')].filter((input) => input.disabled).length
+
+  it('disables only the card being written, never the whole page', async () => {
+    const remote = createRemote(roster())
+    const toggles = await openPage(remote)
+    remote.hold()
+    await click(toggles[1]!)
+
+    expect(disabledCount(), 'one write must not lock every other control on the page').toBe(1)
+
+    remote.release()
+    await settle()
+    expect(disabledCount()).toBe(0)
+  })
+
+  it('applies every toggle when three experts are enabled in a row', async () => {
+    const remote = createRemote(roster())
+    const toggles = await openPage(remote)
+    remote.hold()
+
+    await click(toggles[1]!)
+    await click(toggles[2]!)
+    await click(toggles[3]!)
+
+    remote.release()
+    await settle()
+
+    expect(remote.enabled.length, 'a second and third click must not be dropped').toBe(3)
+  })
+
+  it('leaves every card exactly where it was', async () => {
+    const remote = createRemote(roster())
+    const toggles = await openPage(remote)
+    const orderBefore = [...container.querySelectorAll('.aall-name > span:first-child')].map((node) => node.textContent)
+
+    await click(toggles[1]!)
+    await waitFor(() => remote.enabled.length === 1)
+    await settle()
+    expect(remote.enabled.length, 'the write must have landed before the order is judged').toBe(1)
+
+    const orderAfter = [...container.querySelectorAll('.aall-name > span:first-child')].map((node) => node.textContent)
+    expect(orderAfter, 'enabling must not move rows out from under the pointer').toEqual(orderBefore)
+    expect(container.querySelectorAll('.aall-card').length).toBe(279)
+  })
+
+  it('contains a render failure instead of letting the panel go blank', async () => {
+    // React logs the caught error itself; the noise is not the assertion.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const broken = roster()
+    broken[0] = { ...broken[0]!, intro: undefined as unknown as string }
+    const remote = createRemote(broken)
+
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+    logged.mockRestore()
+
+    const alert = container.querySelector('.aall-error')
+    expect(alert, 'a thrown render must surface as a message, not an empty panel').not.toBeNull()
+    expect(alert?.textContent).toContain('TypeError')
+  })
+})

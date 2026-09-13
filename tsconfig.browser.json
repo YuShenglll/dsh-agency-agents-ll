@@ -14,5 +14,6 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["src/client/**/*.ts"]
+  "include": ["src/client/**/*.ts"],
+  "exclude": ["src/client/**/*.test.ts"]
 }

@@ -14,7 +14,7 @@
 | P1 数据管线 | ✅ | 英文资产 279/279 与上游 `ad9264e` 逐字节一致（git blob SHA 多重集比对）；`pnpm sync` 连跑三次幂等 |
 | P2 中文档案 | ✅ | 279 份 `aligned`，0 suspect / 0 missing；简介中位数 232 汉字 |
 | P3 Host 功能 | ✅ | 37 项 vitest；4 个工具在线 |
-| P4 客户端 + Remote | ✅ | 30 项 verify；`--dump-config` 见主行与 remote 行；**用户在浏览器验收「基本功能实现」** |
+| P4 客户端 + Remote | ✅ | 30 项 verify；`--dump-config` 见主行与 remote 行；**用户在浏览器验收「基本功能实现」**；2026-09-13 修掉界面锁死与白屏（见 4.1），补 8 项 jsdom 组件测试，合计 **45 项 vitest** |
 | P5 发布 | ⏳ | 只差打 tag |
 
 ## 3. 已实测的端到端路径
@@ -40,10 +40,33 @@ describe_expert(上线就绪度评审专家)
 | 项 | 状态 |
 |---|---|
 | `summon_expert` / `summon_experts` 真实召唤一位专家 | 未跑过（需要一次真实的子代理运行） |
-| 浏览器端：设置页渲染、搜索/筛选、启用停用、查看复制提示词 | 用户口述「基本功能实现」，无截图或 Playwright |
+| 浏览器端：设置页渲染、搜索/筛选、查看复制提示词 | 用户口述「基本功能实现」，无截图或 Playwright |
 | 浏览器端：`@` 触发菜单、自定义专家编辑器 | 同上 |
 | 客户端 `ctx.settingsScope.bind({ namespace })` 是否真能写 `promptLocale` | 未单独验证；失败时会显示 `error.save`，不会静默 |
 | Remote 的真实 HTTP 路由 | 用户的设置页能用即间接证明可达 |
+| 启用停用（2026-09-13 修复后） | 由 8 条 jsdom 组件测试覆盖，其中 3 条在修复前必失败；**仍需一次真机复测** |
+| `.aall-switch` 绝对定位输入的包含块 | 已加 `position:relative` 兜底；未确认宿主对 `input[type=checkbox]` 是否有更高优先级的全局规则 |
+
+## 4.1 2026-09-13 的界面故障与修复
+
+**现象**（用户报告）：点第二个专家的启用 → 界面锁死，下半窗口点不动也滚不动；点第三个 → 整页变白，列表消失。
+
+**根因**：不是布局问题，是三个可复现的客户端缺陷叠加，最后被 DSH 的槽位错误边界放大成白屏。
+
+| 缺陷 | 证据 | 修法 |
+|---|---|---|
+| `busy` 是**页面级**的，一次写入把 279 张卡的开关和链接全部 `disabled` | 新测试在旧代码上失败：`expected 279 to be 1` | 忙碌改为**按卡片**（D14） |
+| `runWrite` 的 `saving.current` 哨兵**静默丢弃**后续点击 | 新测试在旧代码上失败：`expected 1 to be 3`；磁盘上 `settings.yaml` 恰好只有 `enabled: [academic-historian]` 一项，与连点两下只落一次吻合 | 改为**按点击顺序排队**，每个写入读当轮 revision（D13） |
+| 渲染期抛错无人接住 → `settings.section` 条目被**退役**，刷新前不再回来 | 新测试在旧代码上失败：错误直接冒泡出组件 | 加 `SectionBoundary`（D15）+ 贡献改为 Remote 挂载**之后**才注册，消除「服务未就绪就渲染」这条必抛路径 |
+
+**顺带修掉但不构成病因的**：
+
+- 隐藏 checkbox 是 `position:absolute` 而父级 `<label>` 没有定位，包含块会逃到设置面板；已加 `position:relative` + `inset:0` + `pointer-events:none`。
+- `useSyncExternalStore` 每渲染都换新的 `subscribe`/`getSnapshot` 闭包 → 每次渲染都退订重订。改为按 Remote 面缓存（`catalogSubscription`），与 harness 自己的 `localeSubscriptionCache` 同法。
+- `sortByEnabled` 是**死代码**：`groupByDivision` 会用 slug 重排每个分组，把它刚排好的顺序又盖回去。所以卡片其实从没移动过 —— 已删除该函数，并在 D12 把「顺序恒定」写进契约。
+- 卡片加 `React.memo`：一次写入只重绘那一张，而不是 279 张。
+
+**未解释的**：用户描述的「窗口上移」。既然卡片从没重排过，最可能是界面锁死期间的滚动/面板位移，随锁死一起消失。若真机复测后仍在，需重新定位。
 
 ## 5. 环境要点（重开会话必读）
 
@@ -97,7 +120,7 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 |---|---|
 | P5 tag | 只差 `git tag`。建议在真实召唤一次专家之后再打 |
 | `summon_expert` 首次真跑 | 会调用 `ctx.subagents.start`，是本项目唯一还没跑过的主路径 |
-| 客户端包 245 KB | 主要来自内联的 zod（Remote 描述符 codec + 编辑器预校验）。参考实现同样如此。要瘦身得把编辑器预校验换成手写检查，但描述符共用就意味着 zod 一定进客户端包 |
+| 客户端包 250 KB | 主要来自内联的 zod（Remote 描述符 codec + 编辑器预校验）。参考实现同样如此。要瘦身得把编辑器预校验换成手写检查，但描述符共用就意味着 zod 一定进客户端包 |
 | 参考实现里没有移植的能力 | 「猜宿主设置按钮」的 DOM 启发式。宿主 `ui-settings-general` 本地不可读、无法验证，故不做；菜单空态改为提示「请先在设置页启用」 |
 | 与 `@michengai/dsh-agency-agents` 的关系 | 用户已自行卸载。若两者同时安装会**工具名冲突**（都注册 `list_experts` / `summon_expert` / `summon_experts`） |
 
@@ -105,6 +128,7 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 
 - 改 Host 逻辑 → `src/index.ts`（工具与 catalog）、`src/remote.ts`（Remote 方法）、`src/roster-settings.ts`（enabled 与自定义专家）
 - 改浏览器端 → `src/client/index.ts`（页面与触发器）、`src/client/locales.ts`（词条，zh 为 key 集真源，en 由 `satisfies` 编译期强制一致）
+- 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 8 条在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰
 - 改资产或术语 → 动 `assets/`、`sync/glossary.json` 后必须跑 `pnpm sync:stamp && pnpm check`
 - 改契约 → 先改 `docs/PLAN.md` 再改代码
 

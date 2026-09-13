@@ -22,6 +22,10 @@
 | D9 | 客户端 UI | 名册浏览、搜索与筛选、启用停用、查看与复制提示词、自定义专家编辑器、输入框 `@` 触发 |
 | D10 | 头像 | 先用 frontmatter 里的 emoji，不引入额外素材 |
 | D11 | 包名 / 仓库 | `dsh-agency-agents-ll` / https://github.com/YuShenglll/dsh-agency-agents-ll |
+| D12 | 名册顺序 | **恒定按分区 + slug**。启用某个专家不移动任何一行 |
+| D13 | 写入的并发模型 | 一次只跑一个写入，**按点击顺序排队**，每个写入在自己那一轮读取当前 revision |
+| D14 | 忙碌范围 | 忙碌是**单张卡片**的：一张卡在写，其余 278 张照常可点。只有页头、筛选器和弹窗用页面级忙碌 |
+| D15 | 失败不牵连整页 | 客户端半边包一层错误边界；渲染抛错就地显示一行可复制的报错，而不是让 `settings.section` 这个槽位条目被退役 |
 
 ## 3. 内容模型
 
@@ -201,3 +205,4 @@ C:\Users\LL\AppData\Roaming\DSH Desktop\runtime-commands\generations\<hash>\bin\
 | 上游演进导致中英脱节 | `sourceSha256` 新鲜度跟踪：带正文的过期是硬失败，仅简介的过期是告警 |
 | 客户端 600KB 级 UI 工作量大 | 已落地为约 1.3k 行源码 + 245 KB 产物；P4 独立成阶段，未阻塞 P0–P3 |
 | 客户端插件因 `dsh.client.inject` 列错模块而静默不激活 | 门禁强制 inject 的每一项都是 peerDependency；见第 8 节 |
+| 渲染期抛错让整个设置页变白 | 槽位条目一旦抛错就被退役（`renderer.ts` 的 `reportEntryError`），刷新前不再回来。故：D15 的错误边界 + 贡献在 Remote 挂载**之后**才注册（挂载前渲染会因服务未就绪而抛错）+ D14 缩小每次重绘的范围 |

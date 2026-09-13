@@ -57,7 +57,7 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 ```powershell
 pnpm install
 pnpm build            # typecheck + tsdown：Host 半边 ESM，客户端半边 ModuleLoader CJS
-pnpm exec vitest run  # 单元测试
+pnpm exec vitest run  # 单元测试（Host）+ 浏览器端组件测试（jsdom）
 pnpm verify           # 发布门禁（包结构、导出、双语 key 一致、分区名单一真源）
 pnpm sync             # 从上游同步英文资产并刷新 manifest
 pnpm sync:stamp       # 为中文档案盖 sourceSha256（从磁盘推导，不靠译者手填）

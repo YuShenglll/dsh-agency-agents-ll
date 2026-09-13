@@ -287,8 +287,11 @@ const CSS = `
 .aall-card{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-2)}
 .aall-card[data-enabled="true"]{border-color:var(--dsw-alias-state-success-primary)}
 .aall-card-body{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
-.aall-card-head{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:start}
-.aall-emoji{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--dsw-alias-bg-layer-3);font-size:18px}
+/* The avatar column is the artwork's own viewBox, so every sticker draws 1:1
+   and none of it is resampled. It also happens to match the identity column's
+   natural height (22px name line + 4px + 18px meta), so the head does not grow. */
+.aall-card-head{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:10px;align-items:start}
+.aall-emoji{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:var(--dsw-alias-bg-layer-3);font-size:24px}
 .aall-avatar{display:block;width:100%;height:100%;border-radius:50%}
 .aall-identity{min-width:0}
 .aall-name{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:15px;font-weight:650;line-height:22px}
@@ -328,7 +331,7 @@ const CSS = `
 .aall-menu-item{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}
 .aall-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .aall-menu-empty{padding:10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
-@media (max-width:640px){.aall-card-head{grid-template-columns:32px minmax(0,1fr)}.aall-card-head>.aall-switch{grid-column:1/-1}}
+@media (max-width:640px){.aall-card-head{grid-template-columns:40px minmax(0,1fr)}.aall-card-head>.aall-switch{grid-column:1/-1}.aall-emoji{width:40px;height:40px;font-size:20px}}
 @media (prefers-reduced-motion:reduce){.aall-switch-track,.aall-switch-track::after{transition:none}}
 `
 

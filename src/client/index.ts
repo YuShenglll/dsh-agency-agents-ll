@@ -195,10 +195,16 @@ export function mentionText(expert: ExpertSummary | undefined, locale: ClientLoc
   return `@${expert.name}\u00A0`
 }
 
-/** Reference source id; stable across languages so drafts keep their codec. */
-export function referenceSource(division: string): string {
-  return `${PLUGIN_ID}:${division}`
-}
+/**
+ * Name of the input-trigger source, and the `source` every reference carries.
+ *
+ * The two must be the same string. `serializeReference` finds the owner with
+ * `roster.all().find(source => source.name === reference.source)` and rejects
+ * with `no serializer for reference source` when nothing matches, which blocks
+ * the whole submit rather than degrading. An earlier revision keyed the
+ * reference by division, so insertion worked and sending never did.
+ */
+const SOURCE_NAME = `${PLUGIN_ID}:@`
 
 /**
  * Project one expert onto the host's atomic reference.
@@ -208,7 +214,7 @@ export function referenceSource(division: string): string {
  */
 export function buildReference(expert: ExpertSummary, locale: ClientLocale): ReferenceInsert {
   return {
-    source: referenceSource(expert.division),
+    source: SOURCE_NAME,
     ref: expert.slug,
     label: expert.name,
     appearance: 'session',
@@ -1232,7 +1238,7 @@ export function apply(ctx: ClientContext): void {
 
     ctx.effect(() => ctx.inputTriggers.registerSource({
       trigger: '@',
-      name: `${PLUGIN_ID}:@`,
+      name: SOURCE_NAME,
       order: 200,
       showGroupTitle: true,
       candidates: async (_session, request) => {

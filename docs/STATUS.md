@@ -312,7 +312,52 @@ describe_expert(上线就绪度评审专家)
 
 **体积**：`lib/client.js` 从 **250 KB → 625 KB**。生成文件本身 362 KB（比 222 KB 原始素材大 63%，因为 `encodeURIComponent` 会把 `<` `>` `"` `=` 全部转义）。对一个本地插件可以接受；换掉它是后面的事。
 
-**仍未做**：**明暗两个主题的真机核对**。素材作者自带的预览显示 36px 圆形在深色下很清楚（奶油色描边起了分隔作用），但那是他的预览页，不是我们的卡片。
+**尺寸**：头像列宽 = 素材自己的 `viewBox`（**48px**），所以每张贴纸都是 **1:1** 绘制，不做重采样。这个尺寸还恰好等于身份列的自然高度（名字 22px + 4px + 分区/徽章 18px），所以头部**没有变高**。窄屏降到 40px。
+
+**已确认**：用户在**深色主题**下看过，奶油色描边起到了贴纸分隔作用，效果正常。
+
+## 5.11 `@` 引用发送失败：source 名对不上（2026-09-13）
+
+用户做**真实召唤测试**时报错：
+
+```
+slash: no serializer for reference source "dsh-agency-agents-ll:academic"
+```
+
+**这是主路径上的真 bug，而且藏得很深：插入一切正常，只有发送才炸。**
+
+**根因**在宿主 `ui-input-trigger/src/client/controller.ts:300-306`：
+
+```ts
+serializeReference(source, ref, signal) {
+  const owner = this.deps.roster.all().find(s => s.name === source)
+  if (owner?.codec === undefined) {
+    return Promise.reject(new Error(`slash: no serializer for reference source "${source}"`))
+  }
+  return owner.codec.serialize(ref, signal)
+}
+```
+
+它用 **source 的 `name`** 反查 owner。而我们两处写的不是同一个字符串：
+
+| 位置 | 值 |
+|---|---|
+| 注册的 source | `name: \`${PLUGIN_ID}:@\`` → `dsh-agency-agents-ll:@` |
+| 插入的引用 | `source: referenceSource(division)` → `dsh-agency-agents-ll:academic` ❌ |
+
+**按分区做 source 是设计错误** —— 当时想着"每个分区一个 source id"，但宿主只按 source 名找 owner，分区与它无关。
+
+**修法**：名字收敛成一个常量，两处共用；`referenceSource(division)` 整个删掉。
+
+```ts
+const SOURCE_NAME = `${PLUGIN_ID}:@`   // 注册用它，每个引用也携带它
+```
+
+**注意行为**：owner 找不到时是**拒绝整个提交**，不是静默降级 —— 所以这个 bug 表现为"发不出去"，而不是"发出去了但没效果"。
+
+**回归测试**钉的是那个**关系**而不是某个具体字符串：`buildReference(experts[0], 'zh').source === 注册的 source.name`。这类断言必须在旧代码上先确认会红，否则它只是装饰。
+
+**遗留**：改 source id 意味着**旧草稿里已存在的引用芯片会失效**（它们带着旧的 `…:academic`）。本地插件、刚踩到，不做迁移。
 
 
 

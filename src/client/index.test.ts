@@ -15,7 +15,7 @@ import { DIVISIONS } from '../names.js'
 import { loadCatalog } from '../catalog.js'
 import { toExpertSummary } from '../roster-settings.js'
 import type { CatalogSnapshot, ExpertSummary } from '../expert-contract.js'
-import { apply } from './index.js'
+import { apply, buildReference } from './index.js'
 import { DICTIONARIES } from './locales.js'
 
 /** The shipped asset trees, read exactly as the Host reads them. */
@@ -144,8 +144,14 @@ function createRemote(experts: ExpertSummary[]): FakeRemote {
 }
 
 /** Mount the plugin against a fake client context and hand back the page. */
-async function mount(remote: FakeRemote): Promise<{ component: React.ComponentType<Record<string, unknown>>; t: (key: string) => string; options: Record<string, unknown> }> {
+async function mount(remote: FakeRemote): Promise<{
+  component: React.ComponentType<Record<string, unknown>>
+  t: (key: string) => string
+  options: Record<string, unknown>
+  sources: Array<Record<string, unknown>>
+}> {
   const registered: Array<{ options: Record<string, unknown>; component: React.ComponentType<Record<string, unknown>> }> = []
+  const sources: Array<Record<string, unknown>> = []
   const t = (key: string): string => (DICTIONARIES.zh as Record<string, string>)[key] ?? key
 
   const ctx = {
@@ -169,7 +175,7 @@ async function mount(remote: FakeRemote): Promise<{ component: React.ComponentTy
       },
     },
     remote: { $mount: async () => async () => {} },
-    inputTriggers: { registerSource: () => () => {} },
+    inputTriggers: { registerSource: (source: Record<string, unknown>) => { sources.push(source); return () => {} } },
     get: () => remote,
   }
 
@@ -182,7 +188,7 @@ async function mount(remote: FakeRemote): Promise<{ component: React.ComponentTy
 
   const entry = registered.find((item) => item.options.name === 'settings.section')
   if (entry === undefined) throw new Error('the settings section was never registered')
-  return { component: entry.component, t, options: entry.options }
+  return { component: entry.component, t, options: entry.options, sources }
 }
 
 describe('roster settings page', () => {
@@ -398,6 +404,22 @@ describe('roster page presentation', () => {
     // The switch lives in the head row, which is the only gridded row left.
     expect(container.querySelector('.aall-card-head > .aall-switch')).not.toBeNull()
     expect(container.querySelector('.aall-card-head > .aall-emoji')).not.toBeNull()
+  })
+
+  it('keys an inserted reference by the registered source name', async () => {
+    const experts = await shippedRoster()
+    const { sources } = await mount(createRemote(experts))
+
+    const source = sources.find((item) => item.trigger === '@')
+    expect(source, 'the @ source must be registered').toBeDefined()
+
+    // serializeReference looks the owner up with
+    // `roster.all().find(s => s.name === reference.source)` and rejects with
+    // "no serializer for reference source" otherwise, which blocks the whole
+    // submit. Insertion still looks fine, so only sending reveals a mismatch.
+    const reference = buildReference(experts[0]!, 'zh')
+    expect(reference.source, 'the reference must carry the source name, not a per-division id').toBe(source!.name)
+    expect(reference.source, 'a per-division source is what broke sending').not.toContain('academic')
   })
 
   it('shows the shipped artwork, and the emoji when there is none', async () => {

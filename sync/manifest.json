@@ -3,7 +3,7 @@
   "upstream": {
     "repo": "https://github.com/msitarzewski/agency-agents",
     "commit": "ad9264e309bd5e5422c04784372d7841b1e5d604",
-    "fetchedAt": "2026-09-12T19:22:52.257Z",
+    "fetchedAt": "2026-09-12T19:24:17.713Z",
     "source": "default",
     "divisions": {
       "academic": {
@@ -1362,423 +1362,423 @@
     "specialized/change-management-consultant": {
       "enSha256": "1feb05dfd0bb4d0942a24a8abb409090ffbc252623e15daa09f5bc8c838b0e5a",
       "bytes": 27377,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "1feb05dfd0bb4d0942a24a8abb409090ffbc252623e15daa09f5bc8c838b0e5a"
     },
     "specialized/chief-financial-officer": {
       "enSha256": "05efa4015fc7feac9bb41942fa6e9eb2b79e2219bf1280b290c754fd16e15a08",
       "bytes": 18628,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "05efa4015fc7feac9bb41942fa6e9eb2b79e2219bf1280b290c754fd16e15a08"
     },
     "specialized/corporate-training-designer": {
       "enSha256": "e70733229e87dde01bd404f502d2f5b491821f681d7230b314b18d98111b898c",
       "bytes": 15673,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "e70733229e87dde01bd404f502d2f5b491821f681d7230b314b18d98111b898c"
     },
     "specialized/customer-service": {
       "enSha256": "71d5b8ccd6fb6c5861230169a708ec5d8c0af628de44fc293ae256181573424f",
       "bytes": 19184,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "71d5b8ccd6fb6c5861230169a708ec5d8c0af628de44fc293ae256181573424f"
     },
     "specialized/customer-success-manager": {
       "enSha256": "2fc5ebc10734a621d65d1bfe0a253158f0a7418ee39b7c93a18efe6b26661cfe",
       "bytes": 23313,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "2fc5ebc10734a621d65d1bfe0a253158f0a7418ee39b7c93a18efe6b26661cfe"
     },
     "specialized/data-consolidation-agent": {
       "enSha256": "7e7de097ff27e3aa2732a9f1ab0bd7acaaef73dabf53fc7be6c90c8ab6afab11",
       "bytes": 2393,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "7e7de097ff27e3aa2732a9f1ab0bd7acaaef73dabf53fc7be6c90c8ab6afab11"
     },
     "specialized/data-privacy-officer": {
       "enSha256": "77e495853a6ef839c8a2f87dae1c8de7b41e11d5e187828fa42c1d9a1e1ae00f",
       "bytes": 22433,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "77e495853a6ef839c8a2f87dae1c8de7b41e11d5e187828fa42c1d9a1e1ae00f"
     },
     "specialized/esg-sustainability-officer": {
       "enSha256": "a8feee4c7b9687ee89ec5ea0879ff98b4cc4451431052369bf00f90d9382b7dd",
       "bytes": 20839,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "a8feee4c7b9687ee89ec5ea0879ff98b4cc4451431052369bf00f90d9382b7dd"
     },
     "specialized/government-digital-presales-consultant": {
       "enSha256": "0676fd83a462828901c64df516034b0912468c85abb751d3e484038d3288b848",
       "bytes": 22759,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "0676fd83a462828901c64df516034b0912468c85abb751d3e484038d3288b848"
     },
     "specialized/grant-writer": {
       "enSha256": "eb35ab7f6bc1c1401a04104b998224af60293e9669751662c6a4f20aabd59eec",
       "bytes": 27051,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "eb35ab7f6bc1c1401a04104b998224af60293e9669751662c6a4f20aabd59eec"
     },
     "specialized/healthcare-aging-parent-care-companion": {
       "enSha256": "fca0725bc30a447d6666df5060333eac2a4f81083cc02670118045678c79a035",
       "bytes": 25248,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "fca0725bc30a447d6666df5060333eac2a4f81083cc02670118045678c79a035"
     },
     "specialized/healthcare-customer-service": {
       "enSha256": "b2e4117a8b449a94409235f74315b52909716985dd94b82b87413a54ca471d73",
       "bytes": 22100,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "b2e4117a8b449a94409235f74315b52909716985dd94b82b87413a54ca471d73"
     },
     "specialized/healthcare-marketing-compliance": {
       "enSha256": "942cc3b43da5f0e6103b7e5087941df4247c602228b2c4b0c6487140e89b176e",
       "bytes": 35322,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "942cc3b43da5f0e6103b7e5087941df4247c602228b2c4b0c6487140e89b176e"
     },
     "specialized/hospitality-guest-services": {
       "enSha256": "1c5819c560d3902eca44a4fb372bae9e882e5b9e8455e51aa3e8d9662a5d184a",
       "bytes": 27773,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "1c5819c560d3902eca44a4fb372bae9e882e5b9e8455e51aa3e8d9662a5d184a"
     },
     "specialized/hr-onboarding": {
       "enSha256": "28a52c26f27ab24d7fe11f5e48cfe712f6d27da142ec97911683b4a3ad92332c",
       "bytes": 23923,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "28a52c26f27ab24d7fe11f5e48cfe712f6d27da142ec97911683b4a3ad92332c"
     },
     "specialized/identity-graph-operator": {
       "enSha256": "f37b705283147e3b92b76d61a3a60bdfe67bad9d6e364d11565329b8a107b3b4",
       "bytes": 14122,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "f37b705283147e3b92b76d61a3a60bdfe67bad9d6e364d11565329b8a107b3b4"
     },
     "specialized/language-translator": {
       "enSha256": "afd1e4b5fb1bb8fa9b8b5770774e0d7b003722681f664147ce7b9dddbcd52a4c",
       "bytes": 16086,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "afd1e4b5fb1bb8fa9b8b5770774e0d7b003722681f664147ce7b9dddbcd52a4c"
     },
     "specialized/legal-billing-time-tracking": {
       "enSha256": "27f84055643150459f4de3102ba05c17696e5967a0efc64426fb600ab3c5d12c",
       "bytes": 27280,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "27f84055643150459f4de3102ba05c17696e5967a0efc64426fb600ab3c5d12c"
     },
     "specialized/legal-client-intake": {
       "enSha256": "b0b1cce8a30f08ada6d630b010b1af99f765f5eca667436af6592545667f4c79",
       "bytes": 25630,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "b0b1cce8a30f08ada6d630b010b1af99f765f5eca667436af6592545667f4c79"
     },
     "specialized/legal-document-review": {
       "enSha256": "02bf51dbc9d8ffc93a8b053a09ec61ee2a3a9905e395fbd24389a532d20d1dba",
       "bytes": 24728,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "02bf51dbc9d8ffc93a8b053a09ec61ee2a3a9905e395fbd24389a532d20d1dba"
     },
     "specialized/loan-officer-assistant": {
       "enSha256": "3d6bfdb598187fb19fba6ab4b50ff357870cda04ea846aa975649d04788df84b",
       "bytes": 28515,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "3d6bfdb598187fb19fba6ab4b50ff357870cda04ea846aa975649d04788df84b"
     },
     "specialized/lsp-index-engineer": {
       "enSha256": "3f720a81cdcdaa63136b6fd7817f198d95a517ca1dfcfaa9ec81a5469a1cff95",
       "bytes": 11197,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "3f720a81cdcdaa63136b6fd7817f198d95a517ca1dfcfaa9ec81a5469a1cff95"
     },
     "specialized/ma-integration-manager": {
       "enSha256": "007dcfaee61d45e852a95c37a4529b1d162a178551f1a7f963ee558f1ace6fb5",
       "bytes": 21438,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "007dcfaee61d45e852a95c37a4529b1d162a178551f1a7f963ee558f1ace6fb5"
     },
     "specialized/medical-billing-coding-specialist": {
       "enSha256": "e9f597ef3a214d886a2b861347183c3674b6e24278c9308ed998a02972e7007c",
       "bytes": 24636,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "e9f597ef3a214d886a2b861347183c3674b6e24278c9308ed998a02972e7007c"
     },
     "specialized/operations-manager": {
       "enSha256": "3c133a31ae1542922444d77d7c8f9964127704ba94638dde12e37a9ad0fd35bd",
       "bytes": 19209,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "3c133a31ae1542922444d77d7c8f9964127704ba94638dde12e37a9ad0fd35bd"
     },
     "specialized/organizational-psychologist": {
       "enSha256": "b7e523e1557ef9e98d5a0b515809996c6bbc0de6a49b1dc355d803e3bae09be2",
       "bytes": 22579,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "b7e523e1557ef9e98d5a0b515809996c6bbc0de6a49b1dc355d803e3bae09be2"
     },
     "specialized/personal-growth-mentor": {
       "enSha256": "623c1ef061d98fedbb941245a39fa5b8c5236ef94194724bfe5c54b8050143d4",
       "bytes": 7833,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "623c1ef061d98fedbb941245a39fa5b8c5236ef94194724bfe5c54b8050143d4"
     },
     "specialized/real-estate-buyer-seller": {
       "enSha256": "00e2f54e76be38c85c4eb406135a0944a3f610d287e6747fbfac37a12c82920a",
       "bytes": 31124,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "00e2f54e76be38c85c4eb406135a0944a3f610d287e6747fbfac37a12c82920a"
     },
     "specialized/recruitment-specialist": {
       "enSha256": "fa1349988c278d0ecf652d7e286b3cac6acd388e10ba2e7d92c59d448303ccf8",
       "bytes": 29401,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "fa1349988c278d0ecf652d7e286b3cac6acd388e10ba2e7d92c59d448303ccf8"
     },
     "specialized/report-distribution-agent": {
       "enSha256": "f5796b3cb693123e6c59f7058c100fe817b744f819d3e281442964714f72bac5",
       "bytes": 2653,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "f5796b3cb693123e6c59f7058c100fe817b744f819d3e281442964714f72bac5"
     },
     "specialized/resume-tailor": {
       "enSha256": "be3d173ce4807d49671c7956f107029a4cb4061651882a0a3ea8c4f20738273f",
       "bytes": 11214,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "be3d173ce4807d49671c7956f107029a4cb4061651882a0a3ea8c4f20738273f"
     },
     "specialized/retail-customer-returns": {
       "enSha256": "5cd60860a6ea57a95ec6d14246d6b0032e0e13ba0220ec4a79527fdc0ccd0f9c",
       "bytes": 27700,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "5cd60860a6ea57a95ec6d14246d6b0032e0e13ba0220ec4a79527fdc0ccd0f9c"
     },
     "specialized/sales-data-extraction-agent": {
       "enSha256": "202a6f04df452385fd1185a6bb23a0c9a47e624088eac14179bed4975f0b268a",
       "bytes": 2697,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "202a6f04df452385fd1185a6bb23a0c9a47e624088eac14179bed4975f0b268a"
     },
     "specialized/sales-outreach": {
       "enSha256": "84d4ca90d4bed4649904c8f239f8e13f373274c8bceb6fd7eb2479e6f9e28c90",
       "bytes": 20656,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "84d4ca90d4bed4649904c8f239f8e13f373274c8bceb6fd7eb2479e6f9e28c90"
     },
     "specialized/specialized-chief-of-staff": {
       "enSha256": "c0d053f19f32d369b6e9a4ded3a3b93efd792648b88b28f0ecd37a899b91b7b3",
       "bytes": 18190,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "c0d053f19f32d369b6e9a4ded3a3b93efd792648b88b28f0ecd37a899b91b7b3"
     },
     "specialized/specialized-civil-engineer": {
       "enSha256": "37c9c37511345799235dcb41a4bd92c5577614c392b9a1fa3a1afee112e5de3b",
       "bytes": 17068,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "37c9c37511345799235dcb41a4bd92c5577614c392b9a1fa3a1afee112e5de3b"
     },
     "specialized/specialized-codebase-archaeologist": {
       "enSha256": "c1b2c22711cb6e74dd834f831d6a8b3f10c93cd462722073b01acae9d0a40700",
       "bytes": 26159,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "c1b2c22711cb6e74dd834f831d6a8b3f10c93cd462722073b01acae9d0a40700"
     },
     "specialized/specialized-cultural-intelligence-strategist": {
       "enSha256": "91f1d2ef19bcf05f8d3b2758049d2dee909939a18ec2d086f192358179455abc",
       "bytes": 6643,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "91f1d2ef19bcf05f8d3b2758049d2dee909939a18ec2d086f192358179455abc"
     },
     "specialized/specialized-developer-advocate": {
       "enSha256": "92617477989c99f57cda5d6d91ac5fea3a56db422a3f3825c4a438ad244079d3",
       "bytes": 14829,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "92617477989c99f57cda5d6d91ac5fea3a56db422a3f3825c4a438ad244079d3"
     },
     "specialized/specialized-document-generator": {
       "enSha256": "cd2ca961e0f7baa18942aaaa315e333ea4315604bbb6a182d7daa31b76dfc3a3",
       "bytes": 2437,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "cd2ca961e0f7baa18942aaaa315e333ea4315604bbb6a182d7daa31b76dfc3a3"
     },
     "specialized/specialized-fedramp-rmf-compliance": {
       "enSha256": "3269ca423abba6405b074ddff80da26ff1d73ae01787cc34bc7a1d45732936b0",
       "bytes": 32568,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "3269ca423abba6405b074ddff80da26ff1d73ae01787cc34bc7a1d45732936b0"
     },
     "specialized/specialized-focus-music-architect": {
       "enSha256": "6399fd4a54e95f9355371e81e0a731852b7e34035bdd6765565f77ce595cf966",
       "bytes": 10361,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "6399fd4a54e95f9355371e81e0a731852b7e34035bdd6765565f77ce595cf966"
     },
     "specialized/specialized-french-consulting-market": {
       "enSha256": "68ebd164a0b3e0493d8deec43f4122e24b293c0a8f77786b2c3a4c8f3924c045",
       "bytes": 11209,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "68ebd164a0b3e0493d8deec43f4122e24b293c0a8f77786b2c3a4c8f3924c045"
     },
     "specialized/specialized-korean-business-navigator": {
       "enSha256": "71eb41ef3705fe155eee87d99e0ec7a52a237af442dd66e3421e225b76580f21",
       "bytes": 14071,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "71eb41ef3705fe155eee87d99e0ec7a52a237af442dd66e3421e225b76580f21"
     },
     "specialized/specialized-master-plan-architect": {
       "enSha256": "c458130fd387521cff95c547b4852c5c47677b3c35c071343bc1e754b7c01654",
       "bytes": 10622,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "c458130fd387521cff95c547b4852c5c47677b3c35c071343bc1e754b7c01654"
     },
     "specialized/specialized-mcp-builder": {
       "enSha256": "3880031674ae2458552ad3c4da99c122469e85351ed57969db7f6f767befd7cb",
       "bytes": 12062,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "3880031674ae2458552ad3c4da99c122469e85351ed57969db7f6f767befd7cb"
     },
     "specialized/specialized-model-qa": {
       "enSha256": "835a26b93003cfb8819201001dad37267971f5702320abcf1720f697e00cf4bd",
       "bytes": 20143,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "835a26b93003cfb8819201001dad37267971f5702320abcf1720f697e00cf4bd"
     },
     "specialized/specialized-pricing-analyst": {
       "enSha256": "fb8a63681615666bb2efe45b7fd2d9ad8a072ab9066efae6b61d454a58039f85",
       "bytes": 12770,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "fb8a63681615666bb2efe45b7fd2d9ad8a072ab9066efae6b61d454a58039f85"
     },
     "specialized/specialized-salesforce-architect": {
       "enSha256": "756fd2dc09f76422dfecb8104e2334f8876f8b95cb6734f8f044c36c641b22e1",
       "bytes": 9943,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "756fd2dc09f76422dfecb8104e2334f8876f8b95cb6734f8f044c36c641b22e1"
     },
     "specialized/specialized-strategy-duel-agent": {
       "enSha256": "3012369325bd06ec6e73f980d4e28947fe1f3dd0121e8ccd5ffb5834b50f3911",
       "bytes": 5946,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "3012369325bd06ec6e73f980d4e28947fe1f3dd0121e8ccd5ffb5834b50f3911"
     },
     "specialized/specialized-workflow-architect": {
       "enSha256": "74d46f03dcdd769163ce73ea8ac025bae48ae2356792a7aff3619c92f802a8ef",
       "bytes": 26479,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "74d46f03dcdd769163ce73ea8ac025bae48ae2356792a7aff3619c92f802a8ef"
     },
     "specialized/study-abroad-advisor": {
       "enSha256": "afd4b1033e76671b4d7a17a74329d7d81f491351004c77876a2615137140b84f",
       "bytes": 16984,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "afd4b1033e76671b4d7a17a74329d7d81f491351004c77876a2615137140b84f"
     },
     "specialized/supply-chain-strategist": {
       "enSha256": "4e3c93bcfefd72b958432d8dbe562c6ca5add80d39a5eec061a83e9e0fe984c3",
       "bytes": 32397,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "4e3c93bcfefd72b958432d8dbe562c6ca5add80d39a5eec061a83e9e0fe984c3"
     },
     "specialized/zk-steward": {
       "enSha256": "01fdb11cc8df0ada78aa31007c1565a3d118d64e9e97ff86b8dd838782a44082",
       "bytes": 10892,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "01fdb11cc8df0ada78aa31007c1565a3d118d64e9e97ff86b8dd838782a44082"
     },
     "support/support-analytics-reporter": {
       "enSha256": "8d4a4d0835f9ecb577d81dacbafcb96841b9b0d1f2af1f9273359502a14fcb5c",
       "bytes": 15796,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "8d4a4d0835f9ecb577d81dacbafcb96841b9b0d1f2af1f9273359502a14fcb5c"
     },
     "support/support-executive-summary-generator": {
       "enSha256": "298891fcf297de5d9b343e9ab9b63864317de63256b15c0c72e6cec172f8f0ff",
       "bytes": 8992,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "298891fcf297de5d9b343e9ab9b63864317de63256b15c0c72e6cec172f8f0ff"
     },
     "support/support-finance-tracker": {
       "enSha256": "73b83d0b0ec4ce53c0335f57473b0e1dcb3b46af22ecd58d9680465b9717b5d9",
       "bytes": 19249,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "73b83d0b0ec4ce53c0335f57473b0e1dcb3b46af22ecd58d9680465b9717b5d9"
     },
     "support/support-infrastructure-maintainer": {
       "enSha256": "64d705a9e58f73868136d781f83ceaf12dfc1721cdb5bfb31b2c03441d69bf5c",
       "bytes": 22365,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "64d705a9e58f73868136d781f83ceaf12dfc1721cdb5bfb31b2c03441d69bf5c"
     },
     "support/support-legal-compliance-checker": {
       "enSha256": "0544f2219d52742f9ba436c193b34eb48c47cee8fcba38aef2b478dcb5e19284",
       "bytes": 26545,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "0544f2219d52742f9ba436c193b34eb48c47cee8fcba38aef2b478dcb5e19284"
     },
     "support/support-support-responder": {
       "enSha256": "4dcd962743e940d1cdd119dcc748d4a434b6b32775aa11ea68fbd2209ee0852c",
       "bytes": 24683,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "4dcd962743e940d1cdd119dcc748d4a434b6b32775aa11ea68fbd2209ee0852c"
     },
     "testing/testing-accessibility-auditor": {
       "enSha256": "982a14c0d0a9b30834ecd6e04811e4f900baf7950e18c68cc97142354cc803e7",
       "bytes": 15300,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "982a14c0d0a9b30834ecd6e04811e4f900baf7950e18c68cc97142354cc803e7"
     },
     "testing/testing-api-tester": {
       "enSha256": "c89d7ae592523f4799426a8b09700ec4b9d99bf2fcae2d1b0dd2900d5f770127",
       "bytes": 12539,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "c89d7ae592523f4799426a8b09700ec4b9d99bf2fcae2d1b0dd2900d5f770127"
     },
     "testing/testing-evidence-collector": {
       "enSha256": "d7e95b64033230aa07c386546d24fca68e4f606c47be1a7698cafc09d4ef5b12",
       "bytes": 8354,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "d7e95b64033230aa07c386546d24fca68e4f606c47be1a7698cafc09d4ef5b12"
     },
     "testing/testing-performance-benchmarker": {
       "enSha256": "24dbd3a55cf6ca36c5f8af4081e87859914131199d87b6f90d129643fcfba43e",
       "bytes": 12224,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "24dbd3a55cf6ca36c5f8af4081e87859914131199d87b6f90d129643fcfba43e"
     },
     "testing/testing-reality-checker": {
       "enSha256": "6d32fcdb114233e13902ec6372d50293b120e85d490b5e81d372c29808f988a1",
       "bytes": 10854,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "6d32fcdb114233e13902ec6372d50293b120e85d490b5e81d372c29808f988a1"
     },
     "testing/testing-test-automation-engineer": {
       "enSha256": "479ba12efa5c19e87b60e3b154170c124ac38c46b95c342f0e3b62537113c0a7",
       "bytes": 12254,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "479ba12efa5c19e87b60e3b154170c124ac38c46b95c342f0e3b62537113c0a7"
     },
     "testing/testing-test-results-analyzer": {
       "enSha256": "f080e1e8a5ddadc90dbcb845317afcf56e9889e0ed6568732605d37851cf21d8",
       "bytes": 14602,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "f080e1e8a5ddadc90dbcb845317afcf56e9889e0ed6568732605d37851cf21d8"
     },
     "testing/testing-tool-evaluator": {
       "enSha256": "98e9a2b4491ffa1979d45ca5e1ddb9233fe35b98cc44c66c9d8a0b258ee9a2f4",
       "bytes": 17542,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "98e9a2b4491ffa1979d45ca5e1ddb9233fe35b98cc44c66c9d8a0b258ee9a2f4"
     },
     "testing/testing-workflow-optimizer": {
       "enSha256": "021ba71e2455071983ce1a6044783bec224b025b864757ce76b2bd4d40c00211",
       "bytes": 22050,
-      "zhState": "stale",
-      "zhSourceSha256": null
+      "zhState": "current",
+      "zhSourceSha256": "021ba71e2455071983ce1a6044783bec224b025b864757ce76b2bd4d40c00211"
     }
   },
   "totals": {
     "agents": 279,
     "divisions": 18,
     "zhMissing": 0,
-    "zhCurrent": 210,
-    "zhStale": 69
+    "zhCurrent": 279,
+    "zhStale": 0
   }
 }

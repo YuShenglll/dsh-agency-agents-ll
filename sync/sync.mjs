@@ -271,10 +271,18 @@ async function main() {
   }
 
   await mkdir(path.dirname(manifestPath), { recursive: true })
-  const serialized = `${JSON.stringify(manifest, null, 2)}\n`
   const previous = (await exists(manifestPath)) ? await readFile(manifestPath, 'utf8') : null
-  const manifestChanged = previous === null || !sameManifest(previous, serialized)
-  await writeFile(manifestPath, serialized, 'utf8')
+  const candidate = `${JSON.stringify(manifest, null, 2)}\n`
+  // A no-op sync must leave the committed manifest byte-identical. Keep the
+  // previous timestamp whenever the timestamp is the only thing that would move,
+  // and do not rewrite the file at all in that case.
+  const manifestChanged = previous === null || !sameManifest(previous, candidate)
+  if (manifestChanged) {
+    await writeFile(manifestPath, candidate, 'utf8')
+  } else {
+    const previousStamp = /"fetchedAt": "([^"]*)"/.exec(previous)?.[1]
+    if (previousStamp !== undefined) manifest.upstream.fetchedAt = previousStamp
+  }
 
   log('')
   log(`agents:      ${agents}`)

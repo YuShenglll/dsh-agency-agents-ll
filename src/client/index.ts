@@ -242,9 +242,16 @@ const CSS = `
 .aall-btn-secondary{background:transparent;border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary)}
 .aall-btn-secondary:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);opacity:1}
 .aall-btn:focus-visible,.aall-control:focus-visible,.aall-switch-input:focus-visible+.aall-switch-track,.aall-segment:focus-visible{outline:2px solid var(--dsw-alias-state-success-primary);outline-offset:2px}
+/* No field here may grow. The settings panel scrolls, and its bar is a real
+   8px gutter (--dsh-scrollbar-width), so emptying the roster widens the
+   content box: anything with flex-grow would absorb those 8px and the row
+   would resize the moment a filter matched nothing. Fixed bases keep the row
+   identical whether or not the scrollbar is present; flex-shrink stays on so a
+   narrow panel still degrades by wrapping. */
 .aall-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}
-.aall-field{display:flex;flex:1 1 220px;min-width:0;flex-direction:column;gap:6px}
-.aall-field-narrow{flex:0 1 200px}
+.aall-field{display:flex;flex:0 1 220px;min-width:0;flex-direction:column;gap:6px}
+.aall-field-search{flex-basis:300px}
+.aall-field-narrow{flex-basis:190px}
 .aall-label{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:16px}
 .aall-control{box-sizing:border-box;width:100%;min-height:34px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px}
 .aall-segmented{align-self:flex-start;display:inline-flex;padding:2px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
@@ -986,7 +993,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
         React.createElement('button', { type: 'button', className: 'aall-btn', disabled: busy, onClick: () => { openEditor() } },
           React.createElement(PlusIcon, null), React.createElement('span', null, t('custom.add'))))),
     React.createElement('div', { className: 'aall-filters' },
-      React.createElement('div', { className: 'aall-field' },
+      React.createElement('div', { className: 'aall-field aall-field-search' },
         React.createElement('label', { className: 'aall-label', htmlFor: 'aall-search' }, t('search')),
         React.createElement('input', {
           id: 'aall-search',
@@ -1004,14 +1011,6 @@ function RosterSection(props: SectionProps): React.ReactElement {
           value: division,
           onChange: (event: React.ChangeEvent<HTMLSelectElement>) => { setDivision(event.target.value) },
         }, divisionOptions(experts, locale).map((option) => React.createElement('option', { key: option.value, value: option.value }, option.label)))),
-      React.createElement('label', { className: 'aall-check aall-check-control' },
-        React.createElement('input', {
-          type: 'checkbox',
-          checked: enabledOnly,
-          disabled: busy,
-          onChange: (event: React.ChangeEvent<HTMLInputElement>) => { setEnabledOnly(event.target.checked) },
-        }),
-        t('filter.enabledOnly')),
       React.createElement('div', { className: 'aall-field aall-field-narrow' },
         React.createElement('span', { className: 'aall-label' }, t('promptLocale.label')),
         React.createElement('div', { className: 'aall-segmented', role: 'group', 'aria-label': t('promptLocale.label') },
@@ -1022,7 +1021,15 @@ function RosterSection(props: SectionProps): React.ReactElement {
             'aria-pressed': preference === value,
             disabled: busy,
             onClick: () => { savePreference(value) },
-          }, t(value === 'auto' ? 'promptLocale.auto' : value === 'zh' ? 'promptLocale.zh' : 'promptLocale.en')))))),
+          }, t(value === 'auto' ? 'promptLocale.auto' : value === 'zh' ? 'promptLocale.zh' : 'promptLocale.en'))))),
+      React.createElement('label', { className: 'aall-check aall-check-control' },
+        React.createElement('input', {
+          type: 'checkbox',
+          checked: enabledOnly,
+          disabled: busy,
+          onChange: (event: React.ChangeEvent<HTMLInputElement>) => { setEnabledOnly(event.target.checked) },
+        }),
+        t('filter.enabledOnly'))),
     error === null ? null : React.createElement('div', { className: 'aall-error', role: 'alert' }, error),
     note === null ? null : React.createElement('div', { className: 'aall-note' }, note),
     groups.length === 0

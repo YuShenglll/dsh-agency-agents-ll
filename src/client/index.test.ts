@@ -319,6 +319,14 @@ describe('roster page presentation', () => {
     expect(container.querySelector('.aall-subtitle'), 'the subtitle line was removed').toBeNull()
     expect(container.querySelector('.aall-summary')?.textContent).toContain('共 279 位专家')
     expect(container.querySelector('.aall-actions')?.textContent).toContain('新建自定义专家')
+
+    // All three are siblings under the section. A dropped parenthesis in the
+    // createElement chain turns the tail into a comma expression, which still
+    // parses, so assert the nesting rather than only that each part exists.
+    expect(container.querySelector('.aall-section > .aall-head')).not.toBeNull()
+    expect(container.querySelector('.aall-section > .aall-filters')).not.toBeNull()
+    expect(container.querySelector('.aall-filters .aall-head'), 'the filters must not swallow the head').toBeNull()
+    expect(container.querySelector('.aall-filters > .aall-field-search'), 'the search field must stay a filter').not.toBeNull()
   })
 
   it('reads its label and tooltip from two separate dictionary keys', () => {

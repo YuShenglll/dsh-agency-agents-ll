@@ -28,27 +28,43 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { join, resolve } from 'node:path'
+import { inspectSvg, isSvg, slugOf } from './avatar-svg.mjs'
 import { roster } from './avatar-manifest.mjs'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const SOURCE = join(ROOT, 'assets', 'avatar')
 const TARGET = join(ROOT, 'src', 'client', 'avatars.ts')
 
-/** Roster slugs that have an SVG on disk, plus the two ways they can disagree. */
+/**
+ * Roster slugs that have an SVG on disk, plus the two ways they can disagree.
+ *
+ * File discovery and naming come from `avatar-svg.mjs`, shared with
+ * `avatar-check.mjs`: this script used to accept only lowercase `.svg` while the
+ * checker accepted `.SVG` case-insensitively, so a file the checker blessed was
+ * silently ignored here and the card fell back to its emoji with nobody told. It
+ * also returns the FILE NAME per slug rather than rebuilding `<slug>.svg`, which
+ * would fail to read a `.SVG` delivery.
+ */
 function collect() {
   const slugs = roster().map((row) => row.slug)
   let entries = []
   try {
-    entries = readdirSync(SOURCE)
+    entries = readdirSync(SOURCE, { withFileTypes: true })
   } catch {
     // No avatar tree on this machine. Not an error: the roster still renders.
   }
-  const present = new Set(entries.filter((name) => name.endsWith('.svg')).map((name) => name.slice(0, -4)))
+  const files = new Map()
+  for (const entry of entries) {
+    if (!entry.isFile() || !isSvg(entry.name)) continue
+    const slug = slugOf(entry.name)
+    if (!files.has(slug)) files.set(slug, entry.name)
+  }
   const known = new Set(slugs)
   return {
-    found: slugs.filter((slug) => present.has(slug)),
-    missing: slugs.filter((slug) => !present.has(slug)),
-    extra: [...present].filter((slug) => !known.has(slug)).sort(),
+    files,
+    found: slugs.filter((slug) => files.has(slug)),
+    missing: slugs.filter((slug) => !files.has(slug)),
+    extra: [...files.keys()].filter((slug) => !known.has(slug)).sort(),
   }
 }
 
@@ -57,7 +73,7 @@ function collect() {
  * @returns TypeScript source.
  */
 export function render() {
-  const { found, missing } = collect()
+  const { files, found, missing } = collect()
   const absent = missing.length === found.length + missing.length
   const lines = [
     '/**',
@@ -75,7 +91,7 @@ export function render() {
     'export const AVATARS: Readonly<Record<string, string>> = {',
   ]
   for (const slug of found) {
-    const svg = readFileSync(join(SOURCE, `${slug}.svg`), 'utf8')
+    const svg = readFileSync(join(SOURCE, files.get(slug)), 'utf8')
     lines.push(`  '${slug}': 'data:image/svg+xml,${encodeURIComponent(svg)}',`)
   }
   lines.push('}', '')
@@ -96,7 +112,7 @@ export function render() {
  * @returns what the write covered.
  */
 export function generate() {
-  const { found, missing, extra } = collect()
+  const { files, found, missing, extra } = collect()
   writeFileSync(TARGET, render(), 'utf8')
   const bytes = readFileSync(TARGET).length
   const note = found.length === 0
@@ -107,7 +123,15 @@ export function generate() {
     console.log(`  没有头像、回退 emoji：${missing.length} 个 —— ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ' …' : ''}`)
   }
   if (extra.length > 0) console.log(`  assets/avatar 里有多余名册之外的图：${extra.length} 个（已忽略）`)
-  return { found, missing, extra }
+  // An `id` in one of these files collides with the same id in another once they
+  // share a module, and `docs/AVATARS.md` claims there are none. The delivery gate
+  // (`pnpm avatars:check`) fails on it; say it here too, because this is the step
+  // that actually puts them together.
+  const withIds = found.filter((slug) => inspectSvg(readFileSync(join(SOURCE, files.get(slug)), 'utf8')).hasId)
+  if (withIds.length > 0) {
+    console.log(`  警告：${withIds.length} 张素材含 id 属性，内联后同名 id 会互相覆盖 —— ${withIds.slice(0, 5).join(', ')}${withIds.length > 5 ? ' …' : ''}`)
+  }
+  return { found, missing, extra, withIds }
 }
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

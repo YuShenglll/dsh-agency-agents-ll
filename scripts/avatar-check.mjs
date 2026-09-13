@@ -6,45 +6,21 @@
  * is extra, and which files break the format rules in `docs/AVATARS.md`, so a
  * partial batch can be assessed without opening the files.
  *
+ * How a file is found and read — extension case, quote style, forbidden elements
+ * — comes from `avatar-svg.mjs`, shared with the generator that inlines the set:
+ * the two used to disagree, and a file this gate blessed could be silently
+ * skipped by `pnpm avatars:inline`.
+ *
  * Usage: pnpm avatars:check <directory>
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
+import { readFileSync, statSync } from 'node:fs'
+import { basename, resolve } from 'node:path'
+import { inspectSvg, isSvg, slugOf, walkFiles } from './avatar-svg.mjs'
 import { roster } from './avatar-manifest.mjs'
-
-/** Elements and attributes the brief forbids, with why they matter here. */
-const FORBIDDEN = [
-  ['<image', '内嵌位图'],
-  ['<text', '文字不是形状'],
-  ['<foreignObject', '外部内容'],
-  ['<script', '脚本'],
-  ['<style', '内联样式表'],
-  ['<mask', '内联后无法复现'],
-  ['<filter', '内联后无法复现'],
-  ['<pattern', '内联后无法复现'],
-  ['xlink:href', '外部引用'],
-  ['href=', '外部引用'],
-  ['url(', '间接引用画笔'],
-]
 
 const HARD_LIMIT = 5 * 1024
 const SOFT_LIMIT = 2 * 1024
 const TOTAL_LIMIT = 600 * 1024
-
-/**
- * Every regular file under a directory.
- * @param root - directory to walk.
- * @param out - accumulator.
- * @returns absolute file paths.
- */
-function walk(root, out = []) {
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const full = join(root, entry.name)
-    if (entry.isDirectory()) walk(full, out)
-    else if (entry.isFile()) out.push(full)
-  }
-  return out
-}
 
 const target = process.argv[2]
 if (target === undefined) {
@@ -60,10 +36,10 @@ if (!statSync(dir).isDirectory()) {
 const expected = roster().map((row) => row.slug)
 const expectedSet = new Set(expected)
 
-const svgFiles = walk(dir).filter((path) => path.toLowerCase().endsWith('.svg'))
+const svgFiles = walkFiles(dir).filter((path) => isSvg(basename(path)))
 const bySlug = new Map()
 for (const path of svgFiles) {
-  const slug = basename(path).replace(/\.svg$/i, '')
+  const slug = slugOf(basename(path))
   if (!bySlug.has(slug)) bySlug.set(slug, path)
 }
 
@@ -88,7 +64,7 @@ for (const [slug, path] of bySlug) {
   if (bytes < 120) tooSmall.push(`${slug} ${bytes} B`)
 
   const source = readFileSync(path, 'utf8')
-  const viewBox = /viewBox="([^"]+)"/.exec(source)?.[1]
+  const { viewBox, forbidden: hits, hasId } = inspectSvg(source)
   if (viewBox === undefined) {
     notSquare.push(`${slug} 无 viewBox`)
   } else {
@@ -96,10 +72,8 @@ for (const [slug, path] of bySlug) {
     if (parts.length !== 4 || parts.some(Number.isNaN)) notSquare.push(`${slug} viewBox 无法解析：${viewBox}`)
     else if (parts[2] !== parts[3]) notSquare.push(`${slug} 非正方形：${viewBox}`)
   }
-  for (const [needle, why] of FORBIDDEN) {
-    if (source.includes(needle)) forbidden.push(`${slug} 含 ${needle}（${why}）`)
-  }
-  if (/\sid="/.test(source)) withIds.push(slug)
+  for (const [needle, why] of hits) forbidden.push(`${slug} 含 ${needle}（${why}）`)
+  if (hasId) withIds.push(slug)
 }
 
 const CAP = 12
@@ -121,11 +95,15 @@ list(`超硬上限 ${HARD_LIMIT} B`, tooBig)
 list('疑似损坏（小于 120 B）', tooSmall)
 list('viewBox 不是正方形或缺失', notSquare)
 list('含不允许的元素', forbidden)
-list('含 id 属性（内联时需加命名空间）', withIds)
+list('含 id 属性（全部内联进同一个模块，同名 id 会互相覆盖）', withIds)
 
 if (overSoft.length > 0) console.log(`\n超过软目标 ${SOFT_LIMIT} B 但未超硬上限：${overSoft.length} 个（可接受）`)
 if (total > TOTAL_LIMIT) console.log(`\n警告：合计 ${(total / 1024).toFixed(0)} KB，超过总体积目标 ${TOTAL_LIMIT / 1024} KB`)
 
-const blocking = missing.length + extra.length + tooBig.length + tooSmall.length + notSquare.length + forbidden.length
+// `withIds` is blocking: the brief forbids `id` outright, docs/AVATARS.md claims
+// zero of them, and all 279 files end up inlined into one client module where a
+// duplicated id is a real collision. Leaving it out of this sum let a violating
+// delivery pass with a printed warning nobody had to act on.
+const blocking = missing.length + extra.length + tooBig.length + tooSmall.length + notSquare.length + forbidden.length + withIds.length
 console.log(blocking === 0 ? '\n格式校验通过' : `\n${blocking} 项需要处理`)
 process.exit(blocking === 0 ? 0 : 1)

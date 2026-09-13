@@ -5,7 +5,7 @@
 //   1  sync --pull   fetch + fast-forward the checkout, then copy new and changed
 //                    English personas into assets/en and refresh the manifest
 //   2  authoring     name the Chinese profiles and avatars that are now missing
-//   3  check         the twelve machine gates
+//   3  check         the thirteen machine gates
 //
 // This is a driver rather than a `&&` chain in package.json for two reasons. The
 // authoring step exits non-zero precisely when there IS work to do, so chaining
@@ -56,6 +56,12 @@ for (const step of STEPS) {
 // Did the authoring step actually refresh its report, or die before writing one?
 // The exit code alone cannot say, because a non-zero exit is also exactly how it
 // reports "there is work to do".
+//
+// `startedAt` is taken before the first step runs, so any report already on disk
+// when this run began is necessarily a PREVIOUS run's, with an older mtime: a
+// crash before the write leaves that stale report and `todo` stays null, which is
+// what the summary prints. (Two concurrent `sync:upstream` runs would defeat the
+// comparison; that is out of scope here.)
 let todo = null
 try {
   if (statSync(reportPath).mtimeMs >= startedAt) {

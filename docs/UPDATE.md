@@ -16,7 +16,7 @@ pnpm sync:upstream
 |---|---|
 | 1/3 | `git fetch` + 快进上游 checkout，然后把新增/改动的英文人设拷进 `assets/en/`，刷新 `sync/manifest.json` |
 | 2/3 | 列出**还需要人工补写**什么（中文档案、头像、要改的代码） |
-| 3/3 | 跑 12 项机械门禁 |
+| 3/3 | 跑 13 项机械门禁 |
 
 退出码非 0 的含义有三种，汇总表会分别说明：同步失败 / **有待办要人写** / 门禁失败。
 待办非空**不是脚本报错**，是它在告诉你该写东西了。
@@ -32,7 +32,7 @@ pnpm sync:upstream
 
 **坑二：新增专家不是门禁失败。** PLAN 第 3 节的设计里，没有中文档案的专家会**降级为英文人设**并计入
 `missing`，而不是判失败（`sync/checks.mjs` 的 `HARD_FAILURE_CHECKS` 里没有 `missing`）。
-所以上游加了三个专家、这边一个字没写，`pnpm check` 照样 12 项全绿、退出 0。
+所以上游加了三个专家、这边一个字没写，`pnpm check` 照样 13 项全绿、退出 0。
 
 两条叠在一起，就是「上游更新了但我不知道」。所以更新必须走一条会联网、会点名的路径。
 
@@ -82,7 +82,7 @@ pnpm avatars:inline                # 4 重生成 src/client/avatars.ts（改了�
 pnpm build                         # 5 typecheck + tsdown
 pnpm test                          # 6 单元测试
 pnpm verify                        # 7 发布门禁
-pnpm check                         # 8 12 项机械门禁，应为 roster=N / aligned=N / suspect=0 / missing=0
+pnpm check                         # 8 13 项机械门禁，应为 roster=N / aligned=N / suspect=0 / missing=0
 ```
 
 第 2、3、4、5、6、7、8 步都是机械的。**只有「写中文档案」和「画头像」需要人（或模型）动手**，

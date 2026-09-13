@@ -11,7 +11,17 @@
  */
 import { DIVISIONS, EN_DIVISION, ZH_DIVISION } from '../names.js'
 
-/** One division's label key, derived so a new division cannot be forgotten. */
+/**
+ * One division's label key.
+ *
+ * The *key* set is derived from `DIVISIONS`, so a division added to
+ * `src/names.ts` gets a dictionary entry without anyone remembering to add one
+ * here — but the *text* is not checked: `ZH_DIVISION[division] ?? division`
+ * falls back to the raw directory name, and the `as` cast below is what lets
+ * that fallback type-check. A new division therefore renders as e.g. `quantum`
+ * until `src/names.ts` names it, silently. That is why `pnpm authoring` has to
+ * point at `src/names.ts` by hand (see `docs/UPDATE.md` section 3).
+ */
 type DivisionKey = `division.${(typeof DIVISIONS)[number]}`
 
 /** The division slice of the dictionary, checked against the real roster. */
@@ -38,21 +48,17 @@ const zh = {
   'refresh': '刷新',
   'search': '搜索',
   'search.placeholder': '搜索中文名、英文名、分区或简介',
-  'search.clear': '清除搜索',
   'filter.division': '分区',
   'filter.division.all': '全部分区',
   'filter.enabledOnly': '只看已启用',
   'filter.division.option': '{name}（{count}）',
   'summary.total': '共 {total} 位专家',
   'summary.enabled': '已启用 {enabled} 位',
-  'enabled': '已启用',
-  'disabled': '已停用',
   'toggle.enable': '启用',
   'toggle.disable': '停用',
   'badge.custom': '自定义',
   'badge.translated': '中文提示词',
   'badge.conflict': '名称冲突',
-  'card.englishName': '英文名：{name}',
   'card.introHeading': '中文简介',
   'card.introMissing': '这位专家尚未提供中文简介。',
   'card.viewPrompt': '查看提示词',
@@ -89,7 +95,6 @@ const zh = {
   'custom.deleteConfirm': '确定要删除「{name}」吗？此操作不可撤销。',
   'custom.deleted': '已删除。',
   'custom.saved': '已保存。',
-  'custom.limit': '自定义专家数量已达上限（{limit} 位）。',
   'error.load': '读取名册失败：{detail}',
   'error.save': '保存失败：{detail}',
   'error.render': '专家名册页面渲染失败，已就地还原而不是清空整页。请把下面这行发给维护者：{detail}',
@@ -118,21 +123,17 @@ const en = {
   'refresh': 'Refresh',
   'search': 'Search',
   'search.placeholder': 'Search Chinese name, English name, division or introduction',
-  'search.clear': 'Clear search',
   'filter.division': 'Division',
   'filter.division.all': 'All divisions',
   'filter.enabledOnly': 'Enabled only',
   'filter.division.option': '{name} ({count})',
   'summary.total': '{total} experts',
   'summary.enabled': '{enabled} enabled',
-  'enabled': 'Enabled',
-  'disabled': 'Disabled',
   'toggle.enable': 'Enable',
   'toggle.disable': 'Disable',
   'badge.custom': 'Custom',
   'badge.translated': 'Chinese prompt',
   'badge.conflict': 'Name conflict',
-  'card.englishName': 'English name: {name}',
   'card.introHeading': 'Chinese introduction',
   'card.introMissing': 'This expert has no Chinese introduction yet.',
   'card.viewPrompt': 'View prompt',
@@ -169,7 +170,6 @@ const en = {
   'custom.deleteConfirm': 'Delete “{name}”? This cannot be undone.',
   'custom.deleted': 'Deleted.',
   'custom.saved': 'Saved.',
-  'custom.limit': 'The limit of {limit} custom experts has been reached.',
   'error.load': 'Could not load the roster: {detail}',
   'error.save': 'Could not save: {detail}',
   'error.render': 'The roster page failed while rendering and was contained instead of blanking the panel. Please send this line to the maintainer: {detail}',

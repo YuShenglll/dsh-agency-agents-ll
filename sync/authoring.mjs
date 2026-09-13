@@ -34,6 +34,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readFrontmatter } from './corpus.mjs'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const assetsRoot = path.join(projectRoot, 'assets')
@@ -56,35 +57,15 @@ function log(message) {
 const sha256 = (buffer) => createHash('sha256').update(buffer).digest('hex')
 
 /**
- * Parse the leading --- frontmatter block. A local copy of the reader in
- * sync.mjs: these scripts are standalone entry points, and a shared module would
- * have to be published alongside them to stay usable.
- */
-function readFrontmatter(text) {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text.replace(/^\uFEFF/, ''))
-  if (match === null) return null
-  const fields = {}
-  for (const line of match[1].split(/\r?\n/)) {
-    const pair = /^([A-Za-z0-9_-]+)\s*:\s*(.*)$/.exec(line)
-    if (pair === null) continue
-    let value = pair[2].trim()
-    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
-      value = value.slice(1, -1)
-    }
-    fields[pair[1]] = value
-  }
-  return fields
-}
-
-/**
- * Read a file's frontmatter, or null when the file is absent or unreadable. A
- * profile that is present but malformed is `pnpm check`'s problem, not this
- * report's: here it only means "there is nothing to quote".
+ * Read a file's frontmatter, or null when the file is absent or unreadable. The
+ * parsing — one BOM rule, shared with sync.mjs, checks.mjs and stamp.mjs — lives
+ * in sync/corpus.mjs; a profile that is present but malformed is `pnpm check`'s
+ * problem, not this report's: here it only means "there is nothing to quote".
  */
 async function frontmatterOf(file) {
   if (file === undefined) return null
   try {
-    return readFrontmatter(await readFile(file, 'utf8'))
+    return readFrontmatter(await readFile(file, 'utf8')).fields
   } catch {
     return null
   }
@@ -332,7 +313,7 @@ async function main() {
     {
       id: 'divisionDrift',
       title: '分区集合变了',
-      hint: '分区同时登记在三处：src/names.ts（ZH_DIVISION / EN_DIVISION）、sync/glossary.json（division:<名字>）、scripts/verify.mjs（DIVISIONS.length === 18）',
+      hint: '分区同时登记在三处：src/names.ts（ZH_DIVISION / EN_DIVISION 各一条）、sync/glossary.json（division:<名字>）、scripts/verify.mjs（DIVISIONS.length === 18）。漏掉 src/names.ts 不会编译失败——界面用 ZH_DIVISION[x] ?? x，会静默退回目录名——所以这条提示必须点名。',
       items: buckets.divisionDrift,
     },
     {
@@ -420,8 +401,8 @@ function describe(item) {
   if (item.change !== undefined) {
     return [
       item.change === 'added'
-        ? `+ 新分区 ${item.division}：需在 src/names.ts、sync/glossary.json、scripts/verify.mjs 三处登记`
-        : `- 分区 ${item.division} 上游已无，但仍是本地 18 个之一，需从三处移除`,
+        ? `+ 新分区 ${item.division}：需在 src/names.ts、sync/glossary.json、scripts/verify.mjs 三处登记（漏掉 src/names.ts 不会报错，界面会静默显示目录名）`
+        : `- 分区 ${item.division} 上游已无，但仍是本地 18 个之一，需从这三处移除`,
     ]
   }
   if (item.delete !== undefined) return [`${item.key}   删除 ${item.delete.join(' 与 ')}`]

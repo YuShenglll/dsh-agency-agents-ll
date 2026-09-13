@@ -16,6 +16,7 @@ import {
   expertPromptSchema,
   promptLocaleStateSchema,
 } from './expert-contract.js'
+import { DIVISIONS } from './names.js'
 
 /** npm package that owns these endpoints. */
 export const TYPERT_PACKAGE = 'dsh-agency-agents-ll'
@@ -60,6 +61,22 @@ function catalogMethod(method: string, parameters: readonly InvocationDescriptor
 const revision = json('expectedRevision', 'number', z.number().int().min(0))
 const slug = json('slug', 'string', z.string().regex(CUSTOM_EXPERT_SLUG))
 
+/**
+ * Slug shape of a roster entry. Every shipped expert is `[a-z0-9][a-z0-9-]*`
+ * and a user-authored one is `custom-<uuid>`, so this accepts both — and, being
+ * an identifier, it cannot name anything outside the expert's asset directory
+ * (`../`, a separator, a drive letter and a dot all fail the shape).
+ */
+const ROSTER_SLUG = /^[a-z0-9][a-z0-9-]{0,127}$/u
+
+/**
+ * Division directories as the wire accepts them, derived from `DIVISIONS` so a
+ * new division is admitted by the same list that defines the roster. `getPrompt`
+ * joins this value onto an asset path, so a free-form string is not acceptable
+ * there even though a length check alone was.
+ */
+const DIVISION_PATTERN = new RegExp(`^(?:${DIVISIONS.join('|')})$`, 'u')
+
 /** Host and browser share this exact table. */
 export const AGENCY_AGENTS_DESCRIPTORS = [
   catalogMethod('getCatalog', []),
@@ -102,7 +119,7 @@ export const AGENCY_AGENTS_DESCRIPTORS = [
     namespace: TYPERT_NAMESPACE,
     method: 'getPrompt',
     invocation: { kind: 'direct' },
-    parameters: [json('slug', 'string', z.string().min(1).max(128)), json('division', 'string', z.string().min(1).max(64))],
+    parameters: [json('slug', 'string', z.string().regex(ROSTER_SLUG)), json('division', 'string', z.string().regex(DIVISION_PATTERN))],
     result: strict('ExpertPrompt', expertPromptSchema),
   },
   {

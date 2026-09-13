@@ -44,16 +44,17 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 ## 机械质量门禁
 
-`pnpm check` 会跑 12 项检查，产出 `sync/report.json`，并把名册分成三堆：
+`pnpm check` 会跑 13 项检查，产出 `sync/report.json`，并把名册分成三堆：
 
 | 检查 | 施加对象 | 硬失败 |
 |---|---|---|
 | 中文档案必填 `name` / `description` / `intro` / `emoji`（`frontmatter`） | 全部 | 是 |
-| 简介 40–600 汉字（`intro`） | 全部 | 是 |
+| 简介 120–400 汉字、3–8 句（`intro`） | 全部 | 是 |
 | 英文逐字节对齐上游基线（`english-byte-identity`） | 全部 | 是 |
 | 代码围栏闭合（`code-fences`） | 全部 | 是 |
 | manifest 覆盖完整（`manifest-coverage`） | 全部 | 是 |
-| 分区与 slug 集合一致（`slug-sets`） | 全部 | 是 |
+| 分区与 slug 集合一致（`slug-sets`） | 全部 | 否 |
+| 中文名全局唯一（`name-uniqueness`） | 全部 | 是 |
 | 翻译新鲜度（`translation-freshness`） | 带正文时硬失败，仅简介时告警 | 视形态 |
 | 段落数、标题层级、长度比、术语表、残留外文 | **仅带正文的档案** | 否 |
 
@@ -71,10 +72,10 @@ pnpm exec vitest run  # 单元测试（Host）+ 浏览器端组件测试（jsdom
 pnpm verify           # 发布门禁（包结构、导出、双语 key 一致、分区名单一真源）
 pnpm sync             # 从上游同步英文资产并刷新 manifest（离线，不联网）
 pnpm upstream:check   # 上游名册动了吗？秒级、不写盘（0 没变 / 1 变了 / 2 没查成）
-pnpm sync:upstream    # 上游更新一条龙：fetch+快进 -> 同步 -> 待办清单 -> 12 项门禁
+pnpm sync:upstream    # 上游更新一条龙：fetch+快进 -> 同步 -> 待办清单 -> 13 项门禁
 pnpm authoring        # 只看待办：上游变动后还需要人工补写哪些中文档案/头像
 pnpm sync:stamp       # 为中文档案盖 sourceSha256（从磁盘推导，不靠译者手填）
-pnpm check            # 12 项机械门禁
+pnpm check            # 13 项机械门禁
 pnpm sync:calibrate   # 用本项目自己的译文对重测长度比区间
 pnpm avatars          # 重新生成 docs/AVATARS.md（卡片头像规格 + 279 个 slug 清单）
 pnpm avatars:check <目录>  # 校验一批头像交付：缺/多/超限/viewBox/禁用元素

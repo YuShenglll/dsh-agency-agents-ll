@@ -7,7 +7,16 @@
 //     never re-encoded, so LF stays LF and no BOM appears.
 //   - assets/zh/** persona files are owned by the translation stage and are never
 //     written here. Only assets/zh/LICENSE is created by this script.
-//   - Running twice in a row changes nothing on disk.
+//   - Running twice in a row changes nothing on disk. Two questions are answered
+//     separately, and the difference matters: whether the manifest CONTENT changed
+//     (everything except `fetchedAt`, CRLF-normalised — see sameManifest), and
+//     whether the BYTES on disk differ from the bytes this run would write. The
+//     timestamp is preserved whenever the content is unchanged, so a no-op sync
+//     rewrites nothing; and when the bytes differ while the content does not — a
+//     checkout that rewrote the file with CRLF, a truncated file — the file IS
+//     rewritten and heals itself. Deciding the write from the content alone is
+//     what left this file permanently diverged from its committed blob (the
+//     residue of docs/STATUS.md 5.16); `.gitattributes` now pins it too.
 //   - Offline by default. A plain run never touches the network: it compares the
 //     checkout against the remote-tracking ref it already has and warns when that
 //     ref has moved on. `--pull` is the explicit opt-in to `git fetch` +
@@ -24,6 +33,7 @@ import { createHash } from 'node:crypto'
 import { access, copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readFrontmatter } from './corpus.mjs'
 
 const UPSTREAM_REPO = 'https://github.com/msitarzewski/agency-agents'
 const MANIFEST_VERSION = 1
@@ -213,29 +223,17 @@ async function collectMarkdown(dir) {
 }
 
 /**
- * Parse the leading --- frontmatter block. Used read-only here, to pick up the
- * sourceSha256 a translation stage recorded in assets/zh.
+ * Read the sourceSha256 a translation stage recorded in a Chinese profile.
+ *
+ * The frontmatter reader is shared with checks.mjs, stamp.mjs and authoring.mjs
+ * (sync/corpus.mjs), so all four agree on the one BOM rule: a leading BOM is
+ * stripped before the fence is looked for. This script used to read such a file as
+ * having no frontmatter at all, and therefore recorded zhState "stale" with a null
+ * zhSourceSha256 for a profile the other three read normally.
  */
-function readFrontmatter(text) {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)
-  if (match === null) return null
-  const fields = {}
-  for (const line of match[1].split(/\r?\n/)) {
-    const pair = /^([A-Za-z0-9_-]+)\s*:\s*(.*)$/.exec(line)
-    if (pair === null) continue
-    let value = pair[2].trim()
-    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
-      value = value.slice(1, -1)
-    }
-    fields[pair[1]] = value
-  }
-  return fields
-}
-
 async function readSourceSha(file) {
   try {
-    const fields = readFrontmatter(await readFile(file, 'utf8'))
-    const value = fields?.sourceSha256
+    const value = readFrontmatter(await readFile(file, 'utf8')).fields.sourceSha256
     return typeof value === 'string' && value.length > 0 ? value : null
   } catch {
     return null
@@ -371,23 +369,35 @@ async function main() {
   await mkdir(path.dirname(manifestPath), { recursive: true })
   const previous = previousText
   const candidate = `${JSON.stringify(manifest, null, 2)}\n`
-  // A no-op sync must leave the committed manifest byte-identical. Keep the
-  // previous timestamp whenever the timestamp is the only thing that would move,
-  // and do not rewrite the file at all in that case.
-  const manifestChanged = previous === null || !sameManifest(previous, candidate)
-  if (manifestChanged) {
-    await writeFile(manifestPath, candidate, 'utf8')
-  } else {
+  // Two separate questions, answered separately.
+  //
+  // 1. CONTENT: is everything except `fetchedAt` the same as last time? If so the
+  //    previous timestamp is restored, so a no-op sync proposes the very bytes it
+  //    already wrote. `sameManifest()` normalises CRLF for this comparison, which
+  //    is right for the question it answers.
+  // 2. BYTES: does the file on disk differ from the bytes this run would write? It
+  //    is the only condition for writing. Deciding the write from the content
+  //    alone cannot see a checkout that rewrote the file with CRLF (core.autocrlf
+  //    is the Git for Windows default): it normalises them away, concludes
+  //    "unchanged", never rewrites, and the working copy stays diverged from the
+  //    committed blob forever. That is the residue of the 5.16 incident on this
+  //    file; `.gitattributes` pins `sync/manifest.json` as well now.
+  const contentUnchanged = previous !== null && sameManifest(previous, candidate)
+  if (contentUnchanged) {
     const previousStamp = /"fetchedAt": "([^"]*)"/.exec(previous)?.[1]
     if (previousStamp !== undefined) manifest.upstream.fetchedAt = previousStamp
   }
+  const next = `${JSON.stringify(manifest, null, 2)}\n`
+  const manifestChanged = previous === null || previous !== next
+  if (manifestChanged) await writeFile(manifestPath, next, 'utf8')
 
   log('')
   log(`agents:      ${agents}`)
   log(`divisions:   ${manifest.totals.divisions}`)
   log(`en written:  ${written} (unchanged ${skipped})`)
   log(`zh missing:  ${zhMissing}  current: ${zhCurrent}  stale: ${zhStale}`)
-  log(`manifest:    ${manifestChanged ? 'updated' : 'unchanged'} -> ${path.relative(projectRoot, manifestPath)}`)
+  const manifestNote = manifestChanged ? (contentUnchanged ? 'rewritten (same content, different bytes on disk)' : 'updated') : 'unchanged'
+  log(`manifest:    ${manifestNote} -> ${path.relative(projectRoot, manifestPath)}`)
 
   // -- roster delta ---------------------------------------------------------
   const previousKeys = new Set(Object.keys(previousFiles))
@@ -419,15 +429,15 @@ async function main() {
 }
 
 /**
- * fetchedAt moves on every run, so compare everything except that timestamp when
- * deciding whether the manifest actually changed.
+ * Compare the CONTENT of two manifests, ignoring the one field that moves on every
+ * run: `fetchedAt`. This answers "did the roster change", not "should the file be
+ * rewritten" — the write decision in main() compares the bytes on disk instead,
+ * which is the only way to notice a CRLF checkout (see the invariants at the top
+ * of this file).
  *
- * Normalise CRLF first. `git checkout` rewrites a modified file with CRLF when
- * core.autocrlf is true (the Git for Windows default), and then the trailing
- * `\n` in the pattern below no longer matches. That made a content-identical
- * manifest look changed and get rewritten on the first sync after any checkout —
- * the exact "running twice changes nothing on disk" invariant this file opens
- * with, broken by the checkout rather than by the sync.
+ * Normalise CRLF first, otherwise the trailing `\n` in the pattern below does not
+ * match a file git rewrote with CRLF and a content-identical manifest looks
+ * changed.
  */
 function sameManifest(previous, next) {
   const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*",\n/, '')

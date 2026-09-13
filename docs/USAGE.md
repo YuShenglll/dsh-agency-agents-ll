@@ -136,7 +136,7 @@ pnpm sync:upstream
 |---|---|
 | 1/3 | `git fetch` + 快进上游 checkout，把新增/改动的英文人设拷进 `assets/en/`，刷新 `sync/manifest.json` |
 | 2/3 | 列出**还需要人工补写**什么（中文档案、头像、要改的代码） |
-| 3/3 | 跑 12 项机械门禁 |
+| 3/3 | 跑 13 项机械门禁 |
 
 **没有更新时**，结尾是这样：
 
@@ -183,7 +183,7 @@ pnpm avatars:inline   # 重生成 src/client/avatars.ts（改了素材必跑）
 pnpm build            # typecheck + tsdown
 pnpm test             # 单元测试
 pnpm verify           # 发布门禁
-pnpm check            # 12 项机械门禁，应为 roster=N / aligned=N / suspect=0 / missing=0
+pnpm check            # 13 项机械门禁，应为 roster=N / aligned=N / suspect=0 / missing=0
 ```
 
 新分区还要改三处代码（`src/names.ts`、`sync/glossary.json`、`scripts/verify.mjs`），

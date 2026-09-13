@@ -122,8 +122,67 @@ async function isDirectory(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isDirectory()
   } catch {
+    // Absent and unreadable both mean "there is nothing to walk here"; callers
+    // that must tell the two apart report the root instead (see `missingRoot`).
     return false
   }
+}
+
+/**
+ * Freshness stamp of the two asset trees.
+ *
+ * One `readdir` per division directory notices an expert being added or removed
+ * — which is what `pnpm sync:upstream` does — and the directory's own mtime
+ * catches a rename that leaves the file count alone. File contents are
+ * deliberately not hashed: re-reading 279 + 279 files on every roster read to
+ * notice an edit costs far more than the staleness it would catch.
+ *
+ * @param roots - the two asset trees.
+ * @param divisions - division directory names to stamp.
+ * @returns a string that changes when any division directory does.
+ */
+export async function assetStamp(roots: AssetRoots, divisions: readonly string[]): Promise<string> {
+  const parts: string[] = []
+  for (const [side, root] of [['en', roots.en], ['zh', roots.zh]] as const) {
+    for (const division of divisions) parts.push(`${side}/${division}:${await divisionStamp(root, division)}`)
+  }
+  return parts.join('|')
+}
+
+/**
+ * Stamp one division directory.
+ * @param root - tree the division lives in.
+ * @param division - division directory name.
+ * @returns the markdown file count and the directory mtime, or `-` when the
+ *   directory cannot be read.
+ */
+async function divisionStamp(root: string, division: string): Promise<string> {
+  const dir = join(root, division)
+  try {
+    const names = await readdir(dir)
+    return `${names.filter((name) => name.endsWith('.md')).length}@${(await stat(dir)).mtimeMs}`
+  } catch {
+    return '-'
+  }
+}
+
+/** Outcome of walking the two asset trees. */
+export interface CatalogLoad {
+  /** Experts keyed by slug. */
+  readonly experts: Map<string, Expert>
+  /** Divisions that actually held English files. */
+  readonly divisions: string[]
+  /**
+   * The tree that could not be walked: `en` (the half the roster is defined by),
+   * `zh` (the half that supplies every entry's Chinese name and introduction),
+   * or `undefined` when both were readable.
+   *
+   * Either way this is a configuration fault — a wrong `config.root` — rather
+   * than a roster fact, and the tools say so instead of reporting "no experts"
+   * or quietly serving an all-English roster. `en` wins when both are absent,
+   * because that is the half whose absence empties the roster.
+   */
+  readonly missingRoot: 'en' | 'zh' | undefined
 }
 
 /**
@@ -135,14 +194,17 @@ async function isDirectory(path: string): Promise<boolean> {
  *
  * @param roots - the two asset trees.
  * @param divisions - division directory names to walk.
- * @returns experts keyed by slug, plus the divisions that actually held files.
+ * @returns experts keyed by slug, the divisions that actually held files, and
+ *   which of the two trees could not be walked at all.
  */
 export async function loadCatalog(
   roots: AssetRoots,
   divisions: readonly string[],
-): Promise<{ experts: Map<string, Expert>; divisions: string[] }> {
+): Promise<CatalogLoad> {
   const experts = new Map<string, Expert>()
   const present: string[] = []
+  const enMissing = !(await isDirectory(roots.en))
+  const zhMissing = !(await isDirectory(roots.zh))
   for (const division of divisions) {
     const enDir = join(roots.en, division)
     if (!(await isDirectory(enDir))) continue
@@ -165,7 +227,7 @@ export async function loadCatalog(
       })
     }
   }
-  return { experts, divisions: present }
+  return { experts, divisions: present, missingRoot: enMissing ? 'en' : zhMissing ? 'zh' : undefined }
 }
 
 /**

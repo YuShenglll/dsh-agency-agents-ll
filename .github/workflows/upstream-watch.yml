@@ -29,6 +29,10 @@ permissions:
 jobs:
   watch:
     runs-on: ubuntu-latest
+    # Every git call inside upstream-check.mjs has its own 2-minute timeout, so
+    # this is only the outer backstop: without it a wedged runner holds the job
+    # for GitHub's six-hour ceiling before anyone hears that the watch is broken.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 

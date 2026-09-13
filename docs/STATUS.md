@@ -28,13 +28,13 @@
 | P5 发布 | ⏳ | 只差打 tag。**四条工具路径已全部真跑过**（见第 3 节），可以打了 |
 | P6 头像 | ✅ | 279/279 交付、校验、接入（见 5.10）。`verify` 三条门禁钉住一致性；明暗主题均已真机确认 |
 
-**门禁现状（2026-09-13，HEAD 见 `git log`）**：
+**门禁现状（2026-09-13，含 §5.18 的整改；HEAD 见 `git log`）**：
 
 ```
-pnpm build   exit=0
-pnpm test    63 passed   （remote 13 + host 24 + client/jsdom 26）
-pnpm verify  exit=0      34 项
-pnpm check   exit=0      12 项，roster 279 / aligned 279 / suspect 0 / missing 0
+pnpm build   exit=0      （typecheck：avatars:inline + 两份 tsconfig；然后 tsdown）
+pnpm test    105 passed  （roster-settings 17 + remote 16 + host 38 + client/jsdom 34）
+pnpm verify  exit=0      35 项
+pnpm check   exit=0      13 项，roster 279 / aligned 279 / suspect 0 / missing 0
 pnpm authoring exit=0    0 项待办
 ```
 
@@ -592,6 +592,52 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 
 **工作流本身也已在 GitHub 上真跑过**（手动 dispatch 两次）：`watch in 6s` / `9s`（run `34762632756`、`34762673007`），日志里是 `upstream:check 退出码 = 0`、未开 issue、未改任何东西。第一次跑带出 `actions/checkout@v4` / `setup-node@v4` 的 **Node 20 弃用注解**，已升到 `@v7` 并复跑确认注解消失。job 里钉 Node 22 是刻意的 —— 它是 `engines` 的下限，在最老的受支持版本上跑通才说明脚本没有偷偷依赖新版本。
 
+## 5.18 2026 代码评审与整改
+
+**前提**：这是一轮三路代码评审（领域评审员 + 工具链评审 + 队长逐条独立复核）之后的整改。**评审当时门禁是全绿的**（63 tests / 12 checks / 34 verify），所以下面每一条都是**门禁覆盖不到**的地方，而不是"忘了跑门禁"。
+
+### 四类根因
+
+1. **真源分裂（blocker）**：浏览器半边早就支持自建专家与启用停用，而 4 个工具仍只读磁盘名册——新建一位专家在 UI 里全程可行（创建、启用、`@` 插入），**唯独最后一步召唤必然失败**。`Config.enabled` 的注释还写着"Slugs the roster offers to the model"，与实现相反。63 条测试里没有一条走完这条主路径。
+2. **门禁自报状态与自身判定脱钩**：`slug-sets` 的 `status` 是字面量 `'pass'`；`english-byte-identity` 的 `status` 不含它自己产生的硬失败。同一次运行可以既打 `PASS` 又列 `HARD FAILURES`——退出码是对的，机器可读的那一份（`report.json`）在撒谎。
+3. **5.16 的残留**：`.gitattributes` 钉住了两棵资产树，**漏了 `sync/manifest.json` 自己**。`sameManifest()` 先归一化行尾再比较，于是它永远看不出该文件已与 git blob 差 1784 字节，也永远不会自愈。
+4. **用户态数据被静默改写**：名字一冲突，投影就把 slug 从 `enabled` 里剔掉（下一次点任意开关即永久落盘）；写入以"本版本能解析的条目"整体替换 `customExperts`，读不出的条目被顺手删除。
+
+### 报告里三条不成立（逐条复核后推翻）
+
+| 报告条目 | 复核结论 |
+|---|---|
+| `upstream.mjs` 的 mtime 守卫可能把上一轮的旧报告当本轮结果 | **误报**。`startedAt` 在三个步骤之前取得，报告给的那个触发场景（"本轮 authoring 在写出报告前崩了"）恰恰是守卫**正确处理**的场景：此时磁盘上的报告必是上一轮的，mtime < startedAt，守卫判"报告未生成" |
+| BOM 处理不一致 ⇒ "manifest 说过期、门禁说新鲜" | **结论错**。`checks.mjs` 把 BOM 报成 `frontmatter` **硬失败**，门禁会红、不会静默放行。真实缺陷只是"四个读者三种行为"，范围因此收窄 |
+| "新分区要改三处"应为"至少六处" | **错**。多出来的四处（头像体积文案、简介区间、README 计数、`AVATARS.md`）与分区登记无关。真实登记面就是 `src/names.ts` / `sync/glossary.json` / `scripts/verify.mjs` 三处 |
+
+三条都在对应工作流动手前发出更正。这与 5.12 记下的那条同源：**一次自信的误报和一次正确的发现同样有价值**——所以复核不能省。
+
+### 报告没覆盖、由新回归测试挖出来的两条
+
+1. **`root` 配置从来没有可用过。** `resolveAssetRoots` 把 `root` **同时**当成 en 与 zh 两棵树，于是同一个文件的 `name:` 同时充当英文名与中文名——D3（英文上游是名册唯一真源）在 `root` 非空时直接失效。该行随 P3 的原始提交 `495d112` 进来，全仓库对布局只有一句注释，且不存在第二种自洽读法（格式是"一个文件一个 `name:`"）。已改为"`root` 是装着 `en/` 与 `zh/` 的目录"，并把布局写进注释。**它是被"自建专家 → summon → 命中 persona"那条端到端断言逼出来的。**
+2. **写入路径会删掉自己读不出的数据。** `readCustom()` 原本整份数组一起 parse（一条坏 ⇒ 全丢），而 `saveCustom` / `deleteCustom` 以它为准整体回写：任何本版本读不出的条目（未来版本写的、手工改坏的）都会在下一次无关写入时被静默删除。已改为 `restate()`——以**原始数组**为基准只动目标 slug，其余（含读不出的）原样带过。同一类的第二处：`validateRosterSettings` 原来对"容器不是数组"抛错，而它在**注册期**被调用，于是手改坏一个字段会让命名空间永久注册失败、页面永远显示"请稍后重试"。现在容器也降级为记录 + 按空处理。
+
+**新契约：读取可以降级，写入绝不丢数据。** 一句话：坏数据只在它自己那一格降级，且必须被记录，绝不由无关操作顺手清理。
+
+### 数据修复
+
+两位专家共用中文名 `电商购物车工程师`：`engineering-drupal-shopping-cart` 改名 **`Drupal 电商购物车工程师`**，`engineering-wordpress-shopping-cart` 改名 **`WordPress 电商购物车工程师`**（各自贴合英文原名）。原本的运行后果：两张卡的开关永久点不动（`disabled: pending || conflict`）、按中文名召唤报歧义、且用户此前对它们的启用标记会在下一次点任意开关时被静默抹掉。
+
+### 新契约（已写进 PLAN 的决策表）
+
+- **D17**：4 个工具面向**完整名册**（出厂 279 + 用户自建）；`enabled` **只治理浏览器侧**，不过滤任何工具。理由是 `enabled` 的工厂默认是 `[]`，拿它过滤工具会让全新安装的 `list_experts` 返回 0 位专家。
+- **D18**：用户态数据不得被静默改写；**冲突不禁用卡片开关**——Host 现在保留冲突 slug，若客户端仍禁用，一位已启用的专家会被困成"勾着、点不动"，而那是 D18 自己引入的陷阱。冲突只由徽章说明、并由 `@` 候选拒绝（mention 只带名字，放进去等于生成一个注定解析失败的引用）。
+
+### 门禁变化
+
+- **12 项 → 13 项**：新增 `name-uniqueness`（**硬失败**）。中文名必须全局唯一——运行时要按名字解析专家，同名会让按名召唤歧义、让两张卡的开关永久禁用。这条不变量此前只靠人记得。
+- **`intro` 区间由 40–600 收紧为 120–400 汉字 + 3–8 句**。原区间比实测（151–314 汉字、3–6 句）低 3.8 倍、高 1.9 倍，它声称要抓的"像占位"与"像贴了一整篇"两种形态**都放过了**；句数约定 PLAN 里写了但从来没有门禁执行。
+- `sync/corpus.mjs`（新）：四个脚本共用一套 frontmatter 读取与度量。此前 `checks.mjs`（执行者）量的是 `stripMarkup` 之后的文本、`calibrate-ratio.mjs`（校准者）量的是原文——**照校准器的输出调阈值就等于调错**；四个读者的 BOM 规则也各不相同。
+- 门禁自报状态一律由该检查自己的 notes/drift 推导（`statusFor()`），手写条目与 `summarize()` 不可能再分叉。
+
+**门禁现状见第 2 节。**
+
 ## 6. 环境要点（重开会话必读）
 
 - **`core.autocrlf = true`（系统级 gitconfig 的默认值）会把 checkout 出来的文件写成 CRLF，而 `git status` 看不出来。** 见 5.16。`assets/en`、`assets/zh` 已用 `.gitattributes` 钉成 `-text`，但**其它文件仍会被转换** —— 今后任何「对字节有契约」的新目录都要一起钉住。要判断磁盘真实字节就用 `[System.IO.File]::ReadAllBytes`，别问 git。另外 `git checkout -- <file>` 对 git 认为「干净」的文件是**空操作**（这正是当时没能把它改回来的原因），要强制重写必须先删掉再 checkout，或者用 `-c core.autocrlf=false`。
@@ -626,12 +672,12 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 ```powershell
 cd G:\dsh\dsh-agency-agents-ll
 pnpm build              # typecheck + tsdown（Host ESM / 客户端 ModuleLoader CJS）
-pnpm exec vitest run    # 60 项：remote 13 + host 24 + 客户端 jsdom 23
-pnpm verify             # 34 项发布门禁
-pnpm check              # 12 项机械门禁 → sync/report.json
+pnpm exec vitest run    # 105 项：roster-settings 17 + remote 16 + host 38 + 客户端 jsdom 34
+pnpm verify             # 35 项发布门禁
+pnpm check              # 13 项机械门禁 → sync/report.json
 pnpm sync               # 拉上游英文资产、刷新 manifest（幂等，离线）
 pnpm upstream:check     # 上游名册动了吗？秒级、不写盘（0 没变 / 1 变了 / 2 没查成）
-pnpm sync:upstream      # 上游更新一条龙：fetch+快进 -> 同步 -> 待办清单 -> 12 项门禁
+pnpm sync:upstream      # 上游更新一条龙：fetch+快进 -> 同步 -> 待办清单 -> 13 项门禁
 pnpm authoring          # 只看待办：还需要人工补写哪些中文档案/头像（见 UPDATE.md）
 pnpm sync:stamp         # 为中文档案盖 sourceSha256（从磁盘推导）
 pnpm sync:calibrate     # 用本项目自己的译文对重测长度比区间
@@ -655,15 +701,16 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 
 ## 8. 门禁速查
 
-`pnpm check` 的 12 项里哪些是硬失败（会让 exit code 非 0）：
+`pnpm check` 的 13 项里哪些是硬失败（会让 exit code 非 0）：
 
 | 硬失败 | 其余只计入 suspect |
 |---|---|
 | 中文档案必填 `name`/`description`/`intro`/`emoji` | 段落数与英文精确相等 |
-| 简介 40–600 汉字 | 标题层级一致 |
+| 简介 120–400 汉字、3–8 句 | 标题层级一致 |
 | 英文逐字节对齐上游基线 | 长度比落在 `[0.7, 3.2]` |
 | 代码围栏闭合 | 术语表一致性 |
 | manifest 覆盖完整 | 正文无残留英文 |
+| 中文名全局唯一 | 分区与 slug 集合一致 |
 | 翻译新鲜度（**仅当该档案带正文**） | |
 
 档案两种形态：`intro-only`（273 份，名册显示中文、召唤回退英文）与 `translated`（6 份，带完整中文正文）。**结构性检查只施加于带正文的档案**。
@@ -685,7 +732,7 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 
 - 改 Host 逻辑 → `src/index.ts`（工具与 catalog）、`src/remote.ts`（Remote 方法）、`src/roster-settings.ts`（enabled 与自定义专家）
 - 改浏览器端 → `src/client/index.ts`（页面与触发器）、`src/client/locales.ts`（词条，zh 为 key 集真源，en 由 `satisfies` 编译期强制一致）
-- 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 **23 条**在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」「滚动条一来自适应布局就跑偏」「data URI 里漏了个 `#` 转义」「引用 source 名与注册名不一致」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰
+- 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 **34 条**在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」「滚动条一来自适应布局就跑偏」「data URI 里漏了个 `#` 转义」「引用 source 名与注册名不一致」「宿主重载后 revision 归零导致永久写不动」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰 —— 例如 §5.18 里那条"出厂名册 0 冲突"的断言在旧夹具下恒真，必须如实标注为空洞断言
 - 改资产或术语 → 动 `assets/`、`sync/glossary.json` 后必须跑 `pnpm sync:stamp && pnpm check`
 - **改头像素材** → 动 `assets/avatar/` 之后跑 `pnpm avatars:inline`（`typecheck` / `test` / `verify` 都会自动先跑，裸 `vitest` 由 `globalSetup` 兜住）。**`src/client/avatars.ts` 是生成文件，且不进 git —— 不要手改，也不要试图提交它**。素材树本身在本机、不在仓库里，**换台机器就没有头像**，这是刻意的
 - 改契约 → 先改 `docs/PLAN.md` 再改代码

@@ -12,8 +12,11 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": []
+    // The client spec belongs to this project (see `include`), and it reaches
+    // the shipped asset trees through the Host modules it imports, so the Node
+    // globals and built-in module declarations have to be visible here.
+    // Nothing the browser bundle itself carries touches them.
+    "types": ["node"]
   },
-  "include": ["src/client/**/*.ts"],
-  "exclude": ["src/client/**/*.test.ts"]
+  "include": ["src/client/**/*.ts"]
 }

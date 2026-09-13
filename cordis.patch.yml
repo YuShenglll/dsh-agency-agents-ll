@@ -1,6 +1,9 @@
 # Read and merged into the target profile by `dsh plugin add`.
-# Expert assets ship inside the package; override config.root only when you want
-# to point the roster at an external checkout.
+# Expert assets ship inside the package; override config.root (or set
+# AGENCY_AGENTS_ROOT) only when you want to point the roster at an external
+# checkout. That directory must contain both trees, `en/` and `zh/`, laid out like
+# the package's own `assets/en` + `assets/zh` — one file carries one `name:`, so a
+# single tree cannot serve as both halves.
 #
 # The Remote half is its own top-level row: the gateway discovers Remote routes
 # from the root service table, so a service provided inside another plugin's

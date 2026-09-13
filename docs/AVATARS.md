@@ -85,7 +85,7 @@
 | `engineering-developer-tooling-engineer` | 开发者工具工程师 | Developer Tooling Engineer | 🛠️ |
 | `engineering-devops-automator` | 运维自动化工程师 | DevOps Automator | ⚙️ |
 | `engineering-drupal-performance` | 网站性能优化工程师 | Drupal Performance Engineer | ⚡ |
-| `engineering-drupal-shopping-cart` | 电商购物车工程师 | Drupal Shopping Cart Engineer | 🛒 |
+| `engineering-drupal-shopping-cart` | Drupal 电商购物车工程师 | Drupal Shopping Cart Engineer | 🛒 |
 | `engineering-email-intelligence-engineer` | 邮件情报工程师 | Email Intelligence Engineer | 📧 |
 | `engineering-embedded-firmware-engineer` | 嵌入式固件工程师 | Embedded Firmware Engineer | 🔩 |
 | `engineering-feishu-integration-developer` | 飞书集成开发工程师 | Feishu Integration Developer | 🔗 |
@@ -130,7 +130,7 @@
 | `engineering-webassembly-engineer` | 网页汇编工程师 | WebAssembly Engineer | 🧩 |
 | `engineering-wechat-mini-program-developer` | 微信小程序开发工程师 | WeChat Mini Program Developer | 💬 |
 | `engineering-wordpress-performance` | WordPress 性能工程师 | WordPress Performance Engineer | ⚡ |
-| `engineering-wordpress-shopping-cart` | 电商购物车工程师 | WordPress Shopping Cart Engineer | 🛍️ |
+| `engineering-wordpress-shopping-cart` | WordPress 电商购物车工程师 | WordPress Shopping Cart Engineer | 🛍️ |
 
 ### 金融（`finance`）— 5 个
 

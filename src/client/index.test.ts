@@ -13,11 +13,13 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DIVISIONS } from '../names.js'
 import { loadCatalog } from '../catalog.js'
-import { toExpertSummary } from '../roster-settings.js'
-import type { CatalogSnapshot, ExpertSummary } from '../expert-contract.js'
+import { createRosterLibrary, type RosterSettingsStore } from '../roster-settings.js'
+import type { CatalogSnapshot, CustomExpertInput, ExpertSummary } from '../expert-contract.js'
 import { apply, buildReference } from './index.js'
+import { acceptCatalog, acceptEnabled, catalogState } from './catalog.js'
 import { AVATARS } from './avatars.js'
 import { DICTIONARIES } from './locales.js'
+import type { AgencyRosterRemote } from './remote.js'
 
 /** The shipped asset trees, read exactly as the Host reads them. */
 const ASSET_ROOT = {
@@ -25,10 +27,32 @@ const ASSET_ROOT = {
   zh: resolve(process.cwd(), 'assets/zh'),
 }
 
+/**
+ * A settings store that stores nothing: this fixture only needs the projection.
+ *
+ * `createRosterLibrary` is the real Host path, so `conflict` is computed here
+ * exactly as it is in production. Projecting with `toExpertSummary` alone —
+ * which hardcodes `conflict: false` — is how two shipped experts sharing a
+ * Chinese name stayed invisible to every assertion in this file.
+ */
+function emptyStore(): RosterSettingsStore {
+  return {
+    read: () => ({ enabled: [], customExperts: [] }),
+    revision: () => 7,
+    mutate: async () => {},
+  }
+}
+
 /** The real roster, through the same projection the Host serves. */
 async function shippedRoster(): Promise<ExpertSummary[]> {
   const { experts } = await loadCatalog(ASSET_ROOT, DIVISIONS)
-  return [...experts.values()].map(toExpertSummary)
+  const library = createRosterLibrary(
+    () => Promise.resolve([...experts.values()]),
+    emptyStore(),
+    () => 'en',
+    () => 'zh',
+  )
+  return (await library.catalog()).experts
 }
 
 /** The subset of the Remote face the page uses, with a controllable revision. */
@@ -41,10 +65,13 @@ interface FakeRemote {
   /** Hold every `setEnabled` until {@link FakeRemote.release} is called. */
   hold(): void
   release(): void
+  /** Hold every `getPrompt` until {@link FakeRemote.releasePrompts} is called. */
+  holdPrompts(): void
+  releasePrompts(): void
   getCatalog(): Promise<{ ok: true; value: CatalogSnapshot }>
   setEnabled(enabled: string[], expectedRevision: number): Promise<{ ok: true; value: { enabled: string[]; revision: number } } | { ok: false; error: { code: string; message: string } }>
   getPrompt(slug: string, division: string): Promise<{ ok: true; value: { prompt: string; locale: 'zh' | 'en'; fallback: boolean } }>
-  getCustomExpert(slug: string): Promise<{ ok: false; error: { code: string; message: string } }>
+  getCustomExpert(slug: string): Promise<{ ok: true; value: CustomExpertInput } | { ok: false; error: { code: string; message: string } }>
   getEnabled(): Promise<{ ok: true; value: { enabled: string[]; revision: number } }>
   getPromptLocale(): Promise<{ ok: true; value: { promptLocale: CatalogSnapshot['promptLocale']; revision: number } }>
   saveCustomExpert(): Promise<{ ok: false; error: { code: string; message: string } }>
@@ -87,6 +114,8 @@ function roster(): ExpertSummary[] {
 function createRemote(experts: ExpertSummary[]): FakeRemote {
   let gate: (() => void) | undefined
   let held: Promise<void> = Promise.resolve()
+  let promptGate: (() => void) | undefined
+  let promptHeld: Promise<void> = Promise.resolve()
   const remote: FakeRemote = {
     calls: [],
     revision: 7,
@@ -99,6 +128,14 @@ function createRemote(experts: ExpertSummary[]): FakeRemote {
       gate?.()
       gate = undefined
       held = Promise.resolve()
+    },
+    holdPrompts() {
+      promptHeld = new Promise<void>((resolve) => { promptGate = resolve })
+    },
+    releasePrompts() {
+      promptGate?.()
+      promptGate = undefined
+      promptHeld = Promise.resolve()
     },
     catalog: undefined as unknown as CatalogSnapshot,
     async getCatalog() {
@@ -113,16 +150,19 @@ function createRemote(experts: ExpertSummary[]): FakeRemote {
         return { ok: false, error: { code: 'internal', message: 'boom' } }
       }
       if (expectedRevision !== remote.revision) {
-        return { ok: false, error: { code: 'conflict', message: 'revision moved' } }
+        // The Host's own wording: `isSettingsConflict` classifies a relayed
+        // failure by this text, because the Remote hop carries only the message.
+        return { ok: false, error: { code: 'conflict', message: 'the section changed since it was read' } }
       }
       remote.revision += 1
       remote.enabled = enabled
       remote.catalog = { ...remote.catalog, enabled, revision: remote.revision }
       return { ok: true, value: { enabled, revision: remote.revision } }
     },
-    async getPrompt(_slug, _division) {
+    async getPrompt(slug, _division) {
       remote.calls.push('getPrompt')
-      return { ok: true, value: { prompt: 'PERSONA BODY', locale: 'en', fallback: true } }
+      await promptHeld
+      return { ok: true, value: { prompt: `PERSONA ${slug}`, locale: 'en', fallback: true } }
     },
     async getCustomExpert() {
       return { ok: false, error: { code: 'missing', message: 'not custom' } }
@@ -195,6 +235,11 @@ async function mount(remote: FakeRemote): Promise<{
   return { component: entry.component, composer: composer.component, t, options: entry.options, sources }
 }
 
+/** The revision the page holds, read from the very cache the page renders. */
+function heldRevision(remote: FakeRemote): number {
+  return catalogState(remote as unknown as AgencyRosterRemote).revision
+}
+
 describe('roster settings page', () => {
   let container: HTMLDivElement
   let root: Root
@@ -259,6 +304,16 @@ describe('roster settings page against the shipped roster', () => {
   afterEach(() => {
     act(() => { root.unmount() })
     container.remove()
+  })
+
+  it('sees the shipped roster through the Host projection, conflicts included', async () => {
+    const experts = await shippedRoster()
+    // `toExpertSummary` alone hardcodes `conflict: false`; only `project()`
+    // computes it. Two shipped experts once shared the Chinese name
+    // 电商购物车工程师 and this fixture could not see it, which made the "no
+    // toggle may be left disabled" assertion below vacuous. Uniqueness is a
+    // content gate now; this is what keeps the fixture honest about it.
+    expect(experts.filter((expert) => expert.conflict).map((expert) => expert.slug)).toEqual([])
   })
 
   it('renders every shipped expert with its Chinese introduction', async () => {
@@ -357,6 +412,28 @@ describe('composer summon menu', () => {
       await Promise.resolve()
     })
     expect(container.querySelector('.aall-menu'), 'a press inside must not dismiss').not.toBeNull()
+  })
+
+  it('contains a composer render failure instead of retiring the slot entry', async () => {
+    // React re-dispatches a caught error as a DOM error event so DevTools can
+    // see it; jsdom would report that as an uncaught exception. Claim it here.
+    const claim = (event: Event): void => { event.preventDefault() }
+    window.addEventListener('error', claim)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // `conversation.input.left` is one slot entry: a throw during render retires
+    // it for the life of the page unless a boundary catches it, exactly like the
+    // settings section. This snapshot shape is what the composer cannot read.
+    const broken = createRemote(roster())
+    broken.catalog = { ...broken.catalog, experts: undefined as unknown as ExpertSummary[] }
+
+    const { composer, t } = await mount(broken)
+    await act(async () => { root.render(React.createElement(composer, { t, insertReference: () => true })) })
+    logged.mockRestore()
+    window.removeEventListener('error', claim)
+
+    const alert = container.querySelector('.aall-error')
+    expect(alert, 'a thrown render must surface as a message, not an empty input bar').not.toBeNull()
+    expect(alert?.textContent).toContain('TypeError')
   })
 })
 
@@ -487,6 +564,69 @@ describe('roster page presentation', () => {
     const reference = buildReference(experts[0]!, 'zh')
     expect(reference.source, 'the reference must carry the source name, not a per-division id').toBe(source!.name)
     expect(reference.source, 'a per-division source is what broke sending').not.toContain('academic')
+  })
+
+  it('answers an @ query from the held snapshot instead of refetching the roster', async () => {
+    const experts = await shippedRoster()
+    const remote = createRemote(experts)
+    remote.enabled = [experts[0]!.slug]
+    remote.catalog = { ...remote.catalog, enabled: remote.enabled }
+    const { sources } = await mount(remote)
+
+    const source = sources.find((item) => item.trigger === '@')
+    expect(source, 'the @ source must be registered').toBeDefined()
+    const candidates = source!.candidates as (session: unknown, request: { query: string }) => Promise<Array<{ hint?: string }>>
+    const reads = (): number => remote.calls.filter((call) => call === 'getCatalog').length
+    const before = reads()
+
+    const listed = await candidates(undefined, { query: '' })
+    expect(listed.length, 'the held snapshot already knows the enabled expert').toBe(1)
+    expect(listed[0]?.hint).toBe(experts[0]!.slug)
+    // A full getCatalog carries all 279 experts and their introductions; one per
+    // keystroke is the defect this pins.
+    expect(reads(), 'typing @ must not put the roster on the wire again').toBe(before)
+  })
+
+  it('keeps a name-conflicted expert out of the @ candidates', async () => {
+    const experts = await shippedRoster()
+    const twin: ExpertSummary = { ...experts[0]!, slug: 'twin-expert', conflict: true }
+    const remote = createRemote([...experts, twin])
+    remote.enabled = [twin.slug]
+    remote.catalog = { ...remote.catalog, enabled: remote.enabled }
+    const { sources } = await mount(remote)
+
+    const source = sources.find((item) => item.trigger === '@')
+    const candidates = source!.candidates as (session: unknown, request: { query: string }) => Promise<unknown[]>
+    // A mention carries only the name, and `resolveExpert` refuses an ambiguous
+    // one, so offering this expert would insert a reference that cannot be
+    // summoned. The picker fails closed.
+    expect(await candidates(undefined, { query: '' })).toEqual([])
+  })
+
+  it('gives the prompt dialog a heading name and closes it on Escape', async () => {
+    const remote = createRemote(roster())
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    const card = container.querySelector('.aall-card')
+    const view = [...(card?.querySelectorAll('.aall-link') ?? [])].find((node) => node.textContent === '查看提示词')
+    await act(async () => {
+      (view as HTMLButtonElement).click()
+      for (let tick = 0; tick < 6; tick += 1) await Promise.resolve()
+    })
+
+    const dialog = container.querySelector('.aall-dialog')
+    expect(dialog, 'the prompt dialog opens').not.toBeNull()
+    const labelId = dialog?.getAttribute('aria-labelledby')
+    expect(labelId, 'a dialog must be named by its own heading').not.toBeNull()
+    expect(container.querySelector(`#${String(labelId)}`)?.textContent).toContain('提示词')
+    expect(container.querySelector('.aall-prompt')?.textContent, 'the read landed').toContain('PERSONA')
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.aall-dialog'), 'Escape closes the dialog').toBeNull()
   })
 
   it('shows the shipped artwork, and the emoji when there is none', async () => {
@@ -636,8 +776,8 @@ describe('roster page stays usable while a write is in flight', () => {
     return [...container.querySelectorAll<HTMLInputElement>('.aall-card .aall-switch-input')]
   }
 
-  const click = async (input: HTMLInputElement): Promise<void> => {
-    await act(async () => { input.click() })
+  const click = async (control: HTMLElement): Promise<void> => {
+    await act(async () => { control.click() })
   }
 
   const settle = async (): Promise<void> => {
@@ -678,6 +818,70 @@ describe('roster page stays usable while a write is in flight', () => {
     await settle()
 
     expect(remote.enabled.length, 'a second and third click must not be dropped').toBe(3)
+  })
+
+  it('recovers when the Host restarts its settings revision at 0', async () => {
+    const remote = createRemote(roster())
+    const toggles = await openPage(remote)
+    // The Host half reloaded on its own — cordis HMR, `dsh plugin add/remove`,
+    // an edited cordis.patch.yml — and re-registered the namespace at revision
+    // 0 while this page kept its cache.
+    remote.revision = 0
+    remote.catalog = { ...remote.catalog, revision: 0 }
+
+    await click(toggles[1]!)
+    await waitFor(() => heldRevision(remote) === 0)
+
+    expect(heldRevision(remote), 'the conflict refresh must land: the Host revision is not a clock').toBe(0)
+    await click(toggles[2]!)
+    await waitFor(() => remote.enabled.length === 1)
+    expect(remote.enabled.length, 'a write after the reset must land instead of failing forever').toBe(1)
+  })
+
+  it('queues a prompt copy asked for while another card is copying', async () => {
+    const experts = await shippedRoster()
+    const remote = createRemote(experts)
+    const written: string[] = []
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text: string) => { written.push(text) } },
+    })
+    const toggles = await openPage(remote)
+    expect(toggles.length).toBe(279)
+
+    const copyAt = (index: number): HTMLButtonElement => {
+      const card = container.querySelectorAll('.aall-card')[index]
+      const action = [...(card?.querySelectorAll('.aall-link') ?? [])].find((node) => node.textContent === '复制提示词')
+      if (action === undefined) throw new Error(`no copy action on card ${index}`)
+      return action as HTMLButtonElement
+    }
+
+    remote.holdPrompts()
+    await click(copyAt(1))
+    await click(copyAt(2))
+    expect(written.length, 'both copies are still waiting on the Host').toBe(0)
+    expect(copyAt(1).disabled, 'the card being copied reports its own busy state').toBe(true)
+
+    remote.releasePrompts()
+    await waitFor(() => written.length === 2)
+
+    expect(written.length, 'the second click must not be dropped').toBe(2)
+    expect(written[0], 'copies run in click order').toContain(experts[1]!.slug)
+    expect(written[1]).toContain(experts[2]!.slug)
+  })
+
+  it('keeps an older write answer from clobbering a newer one', () => {
+    const face = createRemote(roster()) as unknown as AgencyRosterRemote
+    acceptCatalog(face, { experts: [], enabled: [], revision: 4, promptLocale: 'en' })
+
+    // Only answers that landed are ordered against each other, and the client's
+    // own sequence decides — never the Host revision, which the first answer
+    // here carries a *higher* value of.
+    acceptEnabled(face, { enabled: ['second'], revision: 5 }, 2)
+    acceptEnabled(face, { enabled: ['first'], revision: 6 }, 1)
+
+    expect(catalogState(face).enabled.has('second'), 'the newer write wins').toBe(true)
+    expect(catalogState(face).enabled.has('first'), 'the superseded answer is dropped').toBe(false)
   })
 
   it('leaves every card exactly where it was', async () => {

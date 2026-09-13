@@ -4,13 +4,13 @@
  * `zh` is the key-set source of truth; `en` must cover exactly the same keys,
  * which `satisfies` enforces at compile time.
  */
-import type { PromptLocale } from './contract.js'
 
 /** A concrete language for rendered host text. */
 export type LocaleId = 'zh' | 'en'
 
 const zh = {
   'error.rootMissing': '专家名册目录不存在：{root}',
+  'error.zhRootMissing': '中文档案目录不存在：{root}（名册仍可用，但名称与简介会回退显示英文）',
   'error.catalogEmpty': '专家名册为空：{root}',
   'error.expertRequired': '请提供专家名称。',
   'error.expertMissing': '未找到专家：{query}',
@@ -33,6 +33,9 @@ const zh = {
   'error.expertFailed': '（失败：{error}）',
   'error.rosterUnavailable': '专家名册服务尚未就绪，请稍后重试。',
   'list.heading': '共 {total} 位可选专家，覆盖 {divisions} 个分区。先说分区名可展开该分区的专家。',
+  // Joins the expert names on one condensed division line: the separator is
+  // punctuation, so it belongs to the rendered language rather than to the code.
+  'list.nameSeparator': '、',
   'list.group': '{division}（{count}）：{names}',
   'list.groupHeading': '{division}（{count}）',
   'list.expertLine': '- {name} —— {description}',
@@ -52,6 +55,7 @@ export type HostKey = keyof typeof zh
 
 const en = {
   'error.rootMissing': 'Expert roster directory not found: {root}',
+  'error.zhRootMissing': 'Chinese archive directory not found: {root} (the roster still works, but names and summaries fall back to English)',
   'error.catalogEmpty': 'Expert roster is empty: {root}',
   'error.expertRequired': 'Provide an expert name.',
   'error.expertMissing': 'No such expert: {query}',
@@ -74,6 +78,7 @@ const en = {
   'error.expertFailed': '(failed: {error})',
   'error.rosterUnavailable': 'The expert roster service is not ready yet; try again in a moment.',
   'list.heading': '{total} experts available across {divisions} divisions. Name a division to expand it.',
+  'list.nameSeparator': ', ',
   'list.group': '{division} ({count}): {names}',
   'list.groupHeading': '{division} ({count})',
   'list.expertLine': '- {name} — {description}',
@@ -111,6 +116,3 @@ export function formatHost(locale: LocaleId, key: HostKey, params?: Record<strin
 export function resolveHostLocale(value: unknown): LocaleId {
   return value === 'en' ? 'en' : 'zh'
 }
-
-/** Preference values a caller may pass; kept for documentation of the surface. */
-export const HOST_LOCALES: readonly PromptLocale[] = ['auto', 'zh', 'en']

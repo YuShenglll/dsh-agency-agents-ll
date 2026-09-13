@@ -15,7 +15,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry'
-import { coercePromptLocale, resolvePromptLocale, type PromptLocale } from './contract.js'
+import { coercePromptLocale, LOCALE_NS, resolvePromptLocale, SETTINGS_NS, type PromptLocale } from './contract.js'
 import type { CatalogSnapshot, CustomExpertInput, EnabledState, ExpertPrompt, PromptLocaleState } from './expert-contract.js'
 import { customError } from './expert-contract.js'
 import { formatHost, resolveHostLocale, type LocaleId } from './i18n.js'
@@ -39,12 +39,6 @@ const TYPERT = {
   model: { services: [], events: [], objects: [] },
   invocations: AGENCY_AGENTS_DESCRIPTORS,
 } satisfies TypertContribution
-
-/** Settings namespace holding the prompt-language preference. */
-const SETTINGS_NS = 'agency-agents-ll'
-
-/** Settings namespace holding the host interface language. */
-const LOCALE_NS = 'locale'
 
 /**
  * The plugin's Remote half.

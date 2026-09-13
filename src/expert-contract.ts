@@ -8,6 +8,7 @@
  * declared once here instead of being restated on both sides.
  */
 import { z } from 'zod'
+import { DIVISIONS } from './names.js'
 
 /** Most custom experts one installation may define. */
 export const CUSTOM_EXPERT_LIMIT = 200
@@ -24,8 +25,22 @@ export const DEFAULT_EXPERT_EMOJI = '🧩'
 /** Stable slug shape for roster entries defined by the user. */
 export const CUSTOM_EXPERT_SLUG = /^custom-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 
-/** Division directory names the roster serves, as the wire accepts them. */
-const DIVISION_SLUG = /^[a-z][a-z0-9-]{0,63}$/u
+/** Division directories the roster serves, as a lookup: `names.ts` is their source. */
+const DIVISION_NAMES: ReadonlySet<string> = new Set(DIVISIONS)
+
+/**
+ * Whether the roster serves one division.
+ *
+ * A shape check is not enough here: the division is joined onto an asset path
+ * and the wire only admits the divisions this list declares, so an expert
+ * stored under anything else could be written but never read back.
+ *
+ * @param value - candidate division directory name.
+ * @returns whether the roster declares it.
+ */
+function isKnownDivision(value: unknown): boolean {
+  return typeof value === 'string' && DIVISION_NAMES.has(value)
+}
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
@@ -116,13 +131,15 @@ export type PromptLocaleState = z.infer<typeof promptLocaleStateSchema>
 
 /**
  * A user-authored expert. `slug` is present only when editing: leaving it out
- * creates a new expert and the Host mints the slug.
+ * creates a new expert and the Host mints the slug. `division` must be one the
+ * roster serves — the wire refuses any other, so an expert stored elsewhere
+ * could be written but never read back.
  */
 export const customExpertInputSchema = z.object({
   slug: z.string().regex(CUSTOM_EXPERT_SLUG).optional(),
   name: z.string().trim().min(1).max(40).regex(NAME_PATTERN),
   description: z.string().trim().min(1).max(160),
-  division: z.string().regex(DIVISION_SLUG),
+  division: z.string().refine(isKnownDivision),
   emoji: z.string().trim().min(1).max(32).refine(isExpertEmoji),
   intro: z.string().trim().min(1).max(CUSTOM_EXPERT_INTRO_MAX),
   prompt: z.string().trim().min(1).max(CUSTOM_EXPERT_PROMPT_MAX),
@@ -141,9 +158,10 @@ export type CustomExpert = z.output<typeof customExpertSchema>
 
 /**
  * Shape of the `agency-agents-ll` settings section. Custom experts are stored
- * as `unknown` here and parsed by {@link customExpertSchema} on read, so a
- * hand-edited document degrades to "that expert is gone" instead of failing the
- * whole namespace registration.
+ * as `unknown` here and parsed entry by entry by {@link customExpertSchema} on
+ * read, and {@link validateRosterSettings} reports a bad entry instead of
+ * refusing the namespace, so a hand-edited — or future-version — entry degrades
+ * to "that expert is gone" rather than taking the settings page down with it.
  */
 export const agencySettingsSchema = z.object({
   enabled: z.array(z.string()),
@@ -189,22 +207,56 @@ export function normalizeExpertName(value: string): string {
 }
 
 /**
- * Validate the owned settings section before it is stored, so a hand-edited
- * document cannot leave a half-broken roster behind.
+ * Validate the owned settings section before it is stored, and report what a
+ * hand-edited document got wrong.
+ *
+ * Per-entry problems are recorded, not thrown: an entry that does not satisfy
+ * {@link customExpertSchema} — including one written by a future version that
+ * carries an extra key — is dropped from the roster the same way the read path
+ * drops it, and a duplicate or an over-limit entry is reported as it stands.
+ *
+ * This function never throws, and that includes the container. Registration runs
+ * it on the resolved section, so a throw fails the whole namespace: every read
+ * afterwards reports the roster as unavailable for good and the panel says only
+ * "try again later". No typo in a hand-edited document is worth that, so a
+ * container that is not a list degrades to "no custom experts" exactly the way an
+ * unreadable entry degrades to "that expert is gone" — and both are recorded.
+ *
+ * A caller that degrades silently has to log the returned messages: a problem
+ * that is neither refused nor reported is just a quieter way of losing data.
+ *
  * @param value - resolved section.
- * @param locale - language for failure messages.
+ * @param locale - language for problem messages.
+ * @returns one message per problem, addressed by entry; empty when the document
+ *   is clean. These are a record for the caller, never a refusal.
  */
-export function validateRosterSettings(value: { enabled?: unknown; customExperts?: unknown }, locale: 'zh' | 'en' = 'zh'): void {
-  if (!Array.isArray(value.customExperts ?? [])) throw customError('invalid', locale)
-  const records = customExpertSchema.array().safeParse(value.customExperts ?? [])
-  if (!records.success) throw customError('invalid', locale)
-  if (records.data.length > CUSTOM_EXPERT_LIMIT) throw customError('limit', locale)
+export function validateRosterSettings(value: { enabled?: unknown; customExperts?: unknown }, locale: 'zh' | 'en' = 'zh'): readonly string[] {
+  const raw = value.customExperts ?? []
+  const problems: string[] = []
+  if (!Array.isArray(raw)) {
+    problems.push(customError('invalid', locale).message)
+    return problems
+  }
+  const stored = raw
   const slugs = new Set<string>()
   const names = new Set<string>()
-  for (const expert of records.data) {
+  let readable = 0
+  for (const [index, entry] of stored.entries()) {
+    const parsed = customExpertSchema.safeParse(entry)
+    if (!parsed.success) {
+      problems.push(`customExperts[${index}]: ${customError('invalid', locale).message}`)
+      continue
+    }
+    readable += 1
+    const expert = parsed.data
     const name = normalizeExpertName(expert.name)
-    if (slugs.has(expert.slug) || names.has(name)) throw customError('duplicate', locale)
+    if (slugs.has(expert.slug) || names.has(name)) {
+      problems.push(`customExperts[${index}]: ${customError('duplicate', locale).message}`)
+      continue
+    }
     slugs.add(expert.slug)
     names.add(name)
   }
+  if (readable > CUSTOM_EXPERT_LIMIT) problems.push(customError('limit', locale).message)
+  return problems
 }

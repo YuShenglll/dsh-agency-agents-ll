@@ -9,19 +9,19 @@ import { rm, mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
+import { remoteMethods, type InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
 import { loadCatalog, type Expert } from './catalog.js'
 import { coercePromptLocale, resolvePromptLocale, SETTINGS_NS } from './contract.js'
 import type { CustomExpertInput } from './expert-contract.js'
 import { formatHost } from './i18n.js'
-import { loadPersona } from './persona.js'
+import { createPersonaSource } from './index.js'
+import { DIVISIONS } from './names.js'
 import AgencyAgentsRemote from './remote.js'
 import { AGENCY_AGENTS_DESCRIPTORS } from './remote-contract.js'
 import {
   AGENCY_LIBRARY_SERVICE,
   AGENCY_PERSONA_SERVICE,
   createRosterLibrary,
-  type AgencyPersonaSource,
   type RosterSettingsState,
 } from './roster-settings.js'
 
@@ -95,6 +95,21 @@ function fakeSettings(): FakeSettings {
   return settings
 }
 
+/**
+ * Validate one parameter the way the gateway codec validates it off the wire.
+ * @param descriptor - the invocation descriptor under test.
+ * @param index - parameter position.
+ * @param value - untrusted wire value.
+ * @returns the validated value.
+ */
+function parseParameter(descriptor: InvocationDescriptor | undefined, index: number, value: unknown): unknown {
+  const parameter = descriptor?.parameters[index]
+  if (parameter === undefined || parameter.codec.mode !== 'strict') {
+    throw new Error('expected a strict parameter codec')
+  }
+  return parameter.codec.schema.parse(value)
+}
+
 describe('roster library over a settings store', () => {
   let root = ''
   let en = ''
@@ -139,14 +154,9 @@ describe('roster library over a settings store', () => {
       () => coercePromptLocale(settings.promptLocale),
       () => (settings.localePreference === 'en' ? 'en' : 'zh'),
     )
-    const personaSource: AgencyPersonaSource = {
-      async getPrompt(slug, division, locale) {
-        const custom = library.getCustom(slug)
-        if (custom !== undefined) return { prompt: custom.prompt, locale: 'zh', fallback: false }
-        if (slug.startsWith('custom-')) throw new Error(`no such expert: ${slug}`)
-        return loadPersona({ en, zh }, division, slug, locale)
-      },
-    }
+    // The Host's own persona source, not a copy: the custom-vs-shipped branches
+    // this suite cares about only exist in one place.
+    const personaSource = createPersonaSource(library, { en, zh })
     services.set(AGENCY_LIBRARY_SERVICE, library)
     services.set(AGENCY_PERSONA_SERVICE, personaSource)
     const Service = AgencyAgentsRemote as unknown as new (ctx: unknown) => AgencyAgentsRemote
@@ -310,6 +320,45 @@ describe('roster library over a settings store', () => {
   it('rejects a prompt request for an unknown expert', async () => {
     const { remote } = mount()
     await expect(remote.getPrompt('nope', 'engineering')).rejects.toThrow(/nope/)
+  })
+
+  it('refuses a custom persona read through a division it does not belong to', async () => {
+    const { remote } = mount()
+    const created = await remote.saveCustomExpert(newExpert, true, 0)
+    const slug = created.experts.find((expert) => expert.custom)?.slug ?? ''
+    await expect(remote.getPrompt(slug, 'design'))
+      .rejects.toThrow(formatHost('en', 'error.expertMissing', { query: slug }))
+    // The division it does belong to still serves the stored persona.
+    expect(await remote.getPrompt(slug, 'engineering'))
+      .toEqual({ prompt: newExpert.prompt, locale: 'zh', fallback: false })
+  })
+
+  it('reports a custom-shaped slug that no document holds', async () => {
+    const { remote } = mount()
+    const stranger = 'custom-33333333-3333-4333-8333-333333333333'
+    // No asset tree can hold a `custom-` slug, so the miss is reported as one
+    // rather than being probed for on disk.
+    await expect(remote.getPrompt(stranger, 'engineering'))
+      .rejects.toThrow(formatHost('en', 'error.expertMissing', { query: stranger }))
+  })
+
+  it('constrains the getPrompt boundary to a roster slug and a known division', () => {
+    const prompt = AGENCY_AGENTS_DESCRIPTORS.find((descriptor) => descriptor.method === 'getPrompt')
+    expect(prompt).toBeDefined()
+    // `division` and `slug` are joined onto an asset path, so a crafted pair
+    // must not survive the wire boundary.
+    for (const attack of ['../../../../Users/LL/secret', '..', '../secret', '/etc/passwd', 'C:\\Windows\\win.ini', 'engineering/../../secret', '']) {
+      expect(() => parseParameter(prompt, 0, attack)).toThrow()
+    }
+    for (const attack of ['..', '../..', 'engineering/../../secret', 'academic ', '']) {
+      expect(() => parseParameter(prompt, 1, attack)).toThrow()
+    }
+    // Every legitimate value still passes: the shipped slugs, every division
+    // the roster defines, and a Host-minted custom slug.
+    expect(parseParameter(prompt, 0, 'engineering-frontend')).toBe('engineering-frontend')
+    expect(parseParameter(prompt, 0, 'custom-22222222-2222-4222-8222-222222222222'))
+      .toBe('custom-22222222-2222-4222-8222-222222222222')
+    for (const division of DIVISIONS) expect(parseParameter(prompt, 1, division)).toBe(division)
   })
 
   it('keeps the revision fence authoritative when the store refuses the fence itself', async () => {

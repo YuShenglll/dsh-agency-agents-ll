@@ -1,15 +1,25 @@
 // P1 data pipeline - stage 2 of 2: the machine gates from docs/PLAN.md section 6.
 //
-// Ten checks produce sync/report.json plus a readable stdout summary. Every roster
-// entry lands in one of three piles: aligned / suspect / missing.
+// Thirteen checks produce sync/report.json plus a readable stdout summary. Every
+// roster entry lands in one of three piles: aligned / suspect / missing.
 //
-// Hard failures (non-zero exit):
-//   3  english-byte-identity  assets/en no longer byte-matches the baseline commit
-//   2  frontmatter            missing name/description/emoji, unbalanced quotes or fences
-//   10 code-fences            an unclosed ``` silently truncates everything after it
-//      manifest-coverage      a roster entry has no manifest record
-// Checks 4-9 are reported as suspect only: during P2 nearly every file is still
-// untranslated, and those checks say nothing useful about a missing translation.
+// Hard failures (non-zero exit), i.e. exactly HARD_FAILURE_CHECKS below:
+//   english-byte-identity  assets/en no longer byte-matches the baseline commit,
+//                          or its bytes/hash disagree with the manifest record
+//   frontmatter            missing name/description/intro/emoji, unbalanced quotes
+//                          or fences, or a BOM in front of the fence
+//   code-fences            an unclosed ``` silently truncates everything after it
+//   manifest-coverage      a roster entry has no manifest record
+//   intro                  the Chinese introduction is missing, too short or too long
+//   translation-freshness  a translated body was written against an older English file
+//   name-uniqueness        two profiles claim the same display name
+// The remaining checks are reported as suspect or warn only: block alignment,
+// heading alignment, glossary, length ratio and foreign residue say nothing about
+// a profile that carries no translated body, and a missing translation degrades to
+// the English persona by design (docs/PLAN.md section 3.1).
+//
+// Reading and measurement live in sync/corpus.mjs, shared with the other sync
+// scripts so that a BOM or a ratio means the same thing everywhere.
 //
 // Run with: pnpm check   (node is not on PATH in this environment)
 
@@ -19,6 +29,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { access, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { bodyOf, cjkCount, readFrontmatter, stripMarkup, structure, wordCount } from './corpus.mjs'
 
 const MANIFEST_URL = new URL('./manifest.json', import.meta.url)
 const GLOSSARY_URL = new URL('./glossary.json', import.meta.url)
@@ -32,15 +43,18 @@ const REPORT_VERSION = 1
 // the report for later calibration against real translations.
 const THRESHOLDS = {
   // 5: block counts must match exactly, so no floor knob exists here.
-  // 8: CJK characters / English words.
+  // 8: CJK characters / English words, measured on stripMarkup(bodyOf(...))
+  // bodies through the shared sync/corpus.mjs - the same metric the calibrator
+  // measures, which is the point: a band tuned on one definition and enforced with
+  // another is worse than no calibration at all.
   //
-  // Calibrated on 229 real English→Chinese pairs of this same corpus rather than
-  // guessed. Observed quantiles: p05 0.97, p25 1.39, median 1.69, p75 1.83,
-  // p95 3.67, max 9.63. A faithful translation therefore lands near 1.7, and
-  // the band has to contain that: the earlier [0.15, 1.2] would have rejected
-  // the median. The band below covers roughly p05–p90, so it flags a stub or a
-  // wholesale rewrite without failing ordinary variation.
-  // Re-measure with sync/calibrate-ratio.mjs when the corpus changes.
+  // The band is deliberately wide. It came from an earlier, larger calibration of
+  // this corpus that this repository can no longer reproduce: only 6 of the 279
+  // Chinese profiles currently carry a translated body, so `pnpm sync:calibrate`
+  // (which measures exactly this metric) has 6 pairs to work with, not the 229 an
+  // earlier version of this comment claimed. Re-measure before tightening it; a
+  // faithful translation lands well inside the band, and the band exists to catch
+  // a stub or a wholesale rewrite, not ordinary variation.
   lengthRatioMin: 0.7,
   lengthRatioMax: 3.2,
   // 9: an ASCII run this many words long, in a paragraph that has no CJK, counts
@@ -54,7 +68,7 @@ const THRESHOLDS = {
 // would silently pair an old Chinese persona with new English instructions.
 // `missing` is deliberately NOT here — an untranslated expert degrades to
 // English and is counted, not failed.
-const HARD_FAILURE_CHECKS = ['english-byte-identity', 'frontmatter', 'code-fences', 'manifest-coverage', 'translation-freshness', 'intro']
+const HARD_FAILURE_CHECKS = ['english-byte-identity', 'frontmatter', 'code-fences', 'manifest-coverage', 'translation-freshness', 'intro', 'name-uniqueness']
 const HARD_FAILURES = new Set(HARD_FAILURE_CHECKS)
 
 // ---------------------------------------------------------------------------
@@ -93,86 +107,6 @@ function pushNote(notes, fileKey, entry) {
   notes.push(stamped)
 }
 
-/**
- * Split a document into top-level blocks and per-level heading counts.
- *
- * Fence tracking uses a stack rather than a single open/close flag: several
- * upstream personas legitimately nest a ```mermaid / ```bash / ```html fence
- * inside a ```markdown fence to show a whole document, and a single-slot parser
- * mistakes the nested closer for the outer one and then reports a false
- * "unclosed fence". Only a stack that is non-empty at EOF is a truncation risk.
- */
-function structure(text) {
-  const lines = text.split(/\r?\n/)
-  const blocks = []
-  const headings = {}
-  const stack = []
-  let current = []
-  let fenceLines = 0
-
-  const flush = () => {
-    const body = current.join('\n').trim()
-    if (body !== '') blocks.push(body)
-    current = []
-  }
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]
-    const fenceMatch = /^\s*(`{3,}|~{3,})(.*)$/.exec(line)
-    if (fenceMatch !== null) {
-      const marker = fenceMatch[1]
-      fenceLines += 1
-      const top = stack[stack.length - 1]
-      if (top !== undefined && marker[0] === top[0] && marker.length >= top.length) stack.pop()
-      else stack.push(marker)
-      current.push(line)
-      continue
-    }
-    if (stack.length === 0 && /^\s*#{1,6}\s+\S/.test(line)) {
-      const level = /^\s*(#{1,6})/.exec(line)[1].length
-      headings[level] = (headings[level] ?? 0) + 1
-    }
-    if (stack.length === 0 && line.trim() === '') {
-      flush()
-      continue
-    }
-    current.push(line)
-  }
-  flush()
-
-  return {
-    blocks,
-    headings,
-    unclosed: stack.length,
-    fenceLines,
-    fenceParityEven: fenceLines % 2 === 0,
-  }
-}
-
-function stripMarkup(text) {
-  return text
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/~~~[\s\S]*?~~~/g, ' ')
-    .replace(/`[^`\n]*`/g, ' ')
-    .replace(/!?\[[^\]]*\]\([^)]*\)/g, ' ')
-    .replace(/<[^>\n]{1,120}>/g, ' ')
-    .replace(/https?:\/\/\S+/g, ' ')
-}
-
-function stripFrontmatter(text) {
-  return text.replace(/^---\r?\n[\s\S]*?\r?\n---/, ' ')
-}
-
-function cjkCount(text) {
-  const matched = text.match(/[\u3400-\u4dbf\u4e00-\u9fff]/g)
-  return matched === null ? 0 : matched.length
-}
-
-function wordCount(text) {
-  const matched = text.match(/[A-Za-z][A-Za-z'’-]*/g)
-  return matched === null ? 0 : matched.length
-}
-
 // ---------------------------------------------------------------------------
 // Check 2: frontmatter legality
 // ---------------------------------------------------------------------------
@@ -181,69 +115,21 @@ function wordCount(text) {
  * Audit the leading --- block. Parse problems stay separate from missing required
  * keys so the report distinguishes "broken YAML" from "field absent".
  *
- * Quote rule: a value that OPENS with a quote must close it, otherwise a
- * translation silently swallows the rest of the line. A quote appearing inside an
- * otherwise unquoted scalar is valid YAML and common upstream
- * (`vibe: ... where "secure by default" isn't just a slide title.`), so it is not
- * a defect and must not fail the build.
+ * The parsing — including the one BOM rule shared with sync.mjs, stamp.mjs and
+ * authoring.mjs — lives in sync/corpus.mjs; this adds the per-tree required keys.
  */
 function auditFrontmatter(text, requiredKeys = ['name', 'description', 'emoji']) {
-  const problems = []
-  const fields = {}
-  let present = false
-
-  if (!text.startsWith('---')) {
-    problems.push(text.startsWith('\uFEFF') ? 'file starts with a UTF-8 BOM before the frontmatter' : 'no leading "---" frontmatter fence')
-    return { present, fields, problems, sourceSha256: null }
-  }
-
-  const lines = text.split(/\r?\n/)
-  if (lines[0].trim() !== '---') problems.push('opening fence line is not exactly "---"')
-
-  let closing = -1
-  for (let index = 1; index < lines.length; index += 1) {
-    if (lines[index].trim() === '---') {
-      closing = index
-      break
-    }
-  }
-  if (closing === -1) {
-    problems.push('frontmatter "---" fence is never closed')
-    return { present, fields, problems, sourceSha256: null }
-  }
-
-  present = true
-  for (let index = 1; index < closing; index += 1) {
-    const line = lines[index]
-    if (line.trim() === '' || /^\s/.test(line) || line.trimStart().startsWith('#')) continue
-    // Tolerate a quoted key ("name": "x"): translators occasionally quote the
-    // key as well as the value, which is harmless YAML-ish and not worth a hard
-    // failure.
-    const pair = /^"?([A-Za-z0-9_-]+)"?\s*:\s*(.*)$/.exec(line)
-    if (pair === null) {
-      if (line.includes(':')) problems.push(`frontmatter line ${index + 1} is not shaped like "key: value"`)
-      continue
-    }
-    let value = pair[2].trim()
-    const first = value[0]
-    if (first === '"' || first === "'") {
-      if (value.length < 2 || value[value.length - 1] !== first) {
-        problems.push(`frontmatter "${pair[1]}" (line ${index + 1}) opens with a quote it never closes`)
-      } else {
-        value = value.slice(1, -1)
-      }
-    } else if (value.endsWith('"') || value.endsWith("'")) {
-      // Plain scalar that happens to end on a quote; harmless, just unquote it.
-      value = value.slice(0, -1).trim()
-    }
-    fields[pair[1]] = value
-  }
-
+  const parsed = readFrontmatter(text)
+  const problems = [...parsed.problems]
   for (const key of requiredKeys) {
-    if (typeof fields[key] !== 'string' || fields[key].trim() === '') problems.push(`frontmatter is missing required key "${key}"`)
+    if (typeof parsed.fields[key] !== 'string' || parsed.fields[key].trim() === '') problems.push(`frontmatter is missing required key "${key}"`)
   }
-
-  return { present, fields, problems, sourceSha256: typeof fields.sourceSha256 === 'string' ? fields.sourceSha256 : null }
+  return {
+    present: parsed.present,
+    fields: parsed.fields,
+    problems,
+    sourceSha256: typeof parsed.fields.sourceSha256 === 'string' ? parsed.fields.sourceSha256 : null,
+  }
 }
 
 // A Chinese file is an expert profile: name, one-line description, and the
@@ -253,9 +139,45 @@ function auditFrontmatter(text, requiredKeys = ['name', 'description', 'emoji'])
 // English persona.
 const ZH_REQUIRED_KEYS = ['name', 'description', 'intro', 'emoji']
 
-// 3-5 sentences covering the role, its strengths and when to call it.
-const INTRO_MIN_CJK = 40
-const INTRO_MAX_CJK = 600
+// The intro band, measured on the 279 profiles that shipped with this gate:
+// 151-314 CJK characters (mean 230) and 3-6 sentences. The distribution is in
+// `sync/report.json` under `metrics.introSentences` — 125 profiles at 4, 150 at 5,
+// two at 6, and two sitting exactly on the floor. The bounds below leave roughly
+// 20% of headroom below the shortest profile and 27% above the longest, which is
+// the point: the previous 40-600 was 3.8x below and 1.9x above anything real, so
+// both shapes it claimed to catch ("looks like a placeholder" / "looks like a
+// pasted essay") passed. A one-line stub is now under 120 characters and a pasted
+// essay is over 400.
+const INTRO_MIN_CJK = 120
+const INTRO_MAX_CJK = 400
+
+// docs/PLAN.md asks for "3-5 sentences"; the shipped corpus runs 3-6, and two
+// profiles sit exactly on the floor, so it cannot be raised without rewriting
+// them. The band moves with the corpus rather than the other way round: 3-8 keeps
+// the documented 3-sentence floor and gives the two six-sentence profiles room
+// without accepting an essay, and a stub stops passing.
+const INTRO_MIN_SENTENCES = 3
+const INTRO_MAX_SENTENCES = 8
+
+/**
+ * Count the sentences of an intro.
+ *
+ * A sentence ends on a run of `。`, `！` or `？`. ASCII `!` and `?` are deliberately
+ * NOT terminators: `??` and `||` are Javascript operators that appear inside an
+ * intro (specialized-codebase-archaeologist), and no shipped intro uses ASCII
+ * sentence punctuation. A run of `…` counts once. Text after the last terminator
+ * counts as one more sentence when it still carries CJK, so a paragraph that
+ * simply forgot its final full stop is not judged short.
+ *
+ * @param text - the intro as parsed from the Chinese frontmatter.
+ * @returns the number of sentences.
+ */
+function countSentences(text) {
+  const parts = text.split(/[。！？]+|…+/)
+  const terminated = parts.length - 1
+  const tail = parts[parts.length - 1] ?? ''
+  return cjkCount(tail) > 0 ? terminated + 1 : terminated
+}
 
 // ---------------------------------------------------------------------------
 // Check 7 / 9 helpers
@@ -370,50 +292,76 @@ async function main() {
   const extraInZh = [...zhTree.keys].filter((key) => !manifestSet.has(key)).sort()
   const zhWithoutEn = [...zhTree.keys].filter((key) => !enTree.keys.has(key)).sort()
 
-  for (const key of extraInEn) pushNote(notes, null, note('error', 'slug-sets', `assets/en has "${key}" but the manifest does not record it`))
-  for (const key of extraInZh) pushNote(notes, null, note('error', 'slug-sets', `assets/zh has "${key}" but the manifest does not record it`))
-  for (const key of missingInEn) pushNote(notes, null, note('error', 'slug-sets', `manifest records "${key}" but assets/en is missing it`))
-  for (const key of zhWithoutEn) pushNote(notes, null, note('error', 'slug-sets', `assets/zh has "${key}" with no English counterpart`))
+  // The subjects this check names, so the entry can carry the same `files` count
+  // its siblings do. These notes are about a tree or a division rather than about
+  // one profile, so nothing is derived from `summarize()`'s per-file shape.
+  const slugSetSubjects = new Set()
+  const slugSetNote = (subject, entry) => {
+    pushNote(notes, null, entry)
+    if (subject !== null) slugSetSubjects.add(subject)
+  }
 
-  let divisionReport = { upstream: null, en: enTree.divisions.size, zh: zhTree.divisions.size }
+  for (const key of extraInEn) slugSetNote(key, note('error', 'slug-sets', `assets/en has "${key}" but the manifest does not record it`))
+  for (const key of extraInZh) slugSetNote(key, note('error', 'slug-sets', `assets/zh has "${key}" but the manifest does not record it`))
+  for (const key of missingInEn) slugSetNote(key, note('error', 'slug-sets', `manifest records "${key}" but assets/en is missing it`))
+  for (const key of zhWithoutEn) slugSetNote(key, note('error', 'slug-sets', `assets/zh has "${key}" with no English counterpart`))
+
+  const divisionReport = { upstream: null, en: enTree.divisions.size, zh: zhTree.divisions.size }
   if (upstreamDivisions !== null) {
     const expected = new Set(Object.keys(upstreamDivisions))
     divisionReport.upstream = expected.size
     for (const division of expected) {
-      if (!enTree.divisions.has(division)) pushNote(notes, null, note('error', 'slug-sets', `upstream division "${division}" is absent from assets/en`))
-      if (!zhTree.divisions.has(division)) pushNote(notes, null, note('warn', 'slug-sets', `division "${division}" has no assets/zh directory yet`))
+      if (!enTree.divisions.has(division)) slugSetNote(division, note('error', 'slug-sets', `upstream division "${division}" is absent from assets/en`))
+      if (!zhTree.divisions.has(division)) slugSetNote(division, note('warn', 'slug-sets', `division "${division}" has no assets/zh directory yet`))
     }
     for (const division of enTree.divisions) {
-      if (!expected.has(division)) pushNote(notes, null, note('error', 'slug-sets', `assets/en division "${division}" is not listed in upstream divisions.json`))
+      if (!expected.has(division)) slugSetNote(division, note('error', 'slug-sets', `assets/en division "${division}" is not listed in upstream divisions.json`))
     }
-    checks.push({
-      id: 'slug-sets',
-      title: 'division and slug sets agree across assets/en, assets/zh and upstream divisions.json',
-      status: 'pass',
-      hardFailure: false,
-      divisions: divisionReport,
-      agents: { manifest: manifestSet.size, en: enTree.keys.size, zh: zhTree.keys.size },
-      missingInEn: missingInEn.length,
-      missingInZh: missingInZh.length,
-      extraInEn: extraInEn.length,
-      extraInZh: extraInZh.length,
-      zhWithoutEn: zhWithoutEn.length,
-    })
   } else {
+    // Offline is not a pass: the division set could only be cross-checked against
+    // the manifest, which is itself a sync product. Same shape and same grading as
+    // `english-byte-identity` uses for the same situation.
     pushNote(notes, null, note('warn', 'slug-sets', 'upstream checkout not found; division set cross-checked against the manifest only'))
-    checks.push({
-      id: 'slug-sets',
-      title: 'division and slug sets agree across assets/en, assets/zh and upstream divisions.json',
-      status: 'warn',
-      hardFailure: false,
-      detail: 'upstream checkout unavailable',
-      divisions: divisionReport,
-    })
   }
 
+  const slugSetNotes = notes.filter((entry) => entry.check === 'slug-sets')
+  const slugSetErrors = slugSetNotes.filter((entry) => entry.severity === 'error').length
+  const slugSetWarnings = slugSetNotes.filter((entry) => entry.severity === 'warn').length
+  checks.push({
+    id: 'slug-sets',
+    title: 'division and slug sets agree across assets/en, assets/zh and upstream divisions.json',
+    status: statusFor('slug-sets', slugSetErrors, slugSetWarnings),
+    hardFailure: false,
+    notes: slugSetErrors,
+    warnings: slugSetWarnings,
+    files: slugSetSubjects.size,
+    ...(upstreamDivisions === null ? { detail: 'upstream checkout unavailable' } : {}),
+    divisions: divisionReport,
+    agents: { manifest: manifestSet.size, en: enTree.keys.size, zh: zhTree.keys.size },
+    missingInEn: missingInEn.length,
+    missingInZh: missingInZh.length,
+    extraInEn: extraInEn.length,
+    extraInZh: extraInZh.length,
+    zhWithoutEn: zhWithoutEn.length,
+  })
+
   // -- 3. English byte identity against the baseline commit ------------------
+  // Every error this check can produce lands in `drift`, not just the upstream
+  // comparison: the manifest hash and the byte count are what it still compares
+  // when no checkout is around, and they are exactly the two hard failures
+  // docs/STATUS.md 5.16 recorded next to a PASS. Keeping them out of `drift` is
+  // how this entry's status could contradict the hard-failure list of the very
+  // same run.
   const upstreamIndex = upstreamDir === null ? null : await indexUpstream(upstreamDir)
-  const drift = { compared: 0, drifted: [], upstreamMissing: [], unavailable: upstreamIndex === null }
+  const drift = {
+    compared: 0,
+    drifted: [],
+    upstreamMissing: [],
+    manifestMismatch: [],
+    byteMismatch: [],
+    missing: [],
+    unavailable: upstreamIndex === null,
+  }
   if (upstreamIndex === null) {
     pushNote(notes, null, note('warn', 'english-byte-identity', 'upstream checkout not found; assets/en compared against the manifest hash only'))
   }
@@ -424,13 +372,68 @@ async function main() {
   // is the whole point of that gate; iterating the manifest alone would skip it.
   const files = []
   const allKeys = [...new Set([...manifestKeys, ...enTree.keys, ...zhTree.keys])].sort()
-  for (const key of allKeys) {
-    const record = manifest.files[key]
+  /** Assets paths for one manifest key, so the two loops over keys cannot drift. */
+  const pathsFor = (key) => {
     const slash = key.lastIndexOf('/')
     const division = key.slice(0, slash)
     const slug = key.slice(slash + 1)
-    const enPath = path.join(assetsRoot, 'en', division, `${slug}.md`)
-    const zhPath = path.join(assetsRoot, 'zh', division, `${slug}.md`)
+    return {
+      division,
+      slug,
+      en: path.join(assetsRoot, 'en', division, `${slug}.md`),
+      zh: path.join(assetsRoot, 'zh', division, `${slug}.md`),
+    }
+  }
+
+  // -- 11. name uniqueness ---------------------------------------------------
+  // An expert is resolved BY NAME at runtime (`resolveExpert` in src/catalog.ts
+  // matches `normalizeName(nameZh)` and `normalizeName(nameEn)`), so a display name
+  // is a second unique key next to the slug. Two shipped profiles sharing the
+  // Chinese name 电商购物车工程师 made every switch on both cards permanently
+  // disabled (`collides` in src/roster-settings.ts) and made `summon_expert` on
+  // that name ambiguous. Nothing in this suite guarded the invariant, which is how
+  // it shipped. Names are read here rather than in the per-file loop below so that
+  // a profile whose English counterpart is missing is still checked.
+  const names = { zh: [], en: [] }
+  for (const key of allKeys) {
+    const paths = pathsFor(key)
+    for (const [tree, file] of [['zh', paths.zh], ['en', paths.en]]) {
+      if (!(await exists(file))) continue
+      const name = readFrontmatter(await readFile(file, 'utf8')).fields.name
+      if (typeof name === 'string' && name.trim() !== '') names[tree].push({ key, name })
+    }
+  }
+  const nameDuplicateGroups = [
+    ...findDuplicateNames(names.zh).map((group) => ({ ...group, tree: 'zh', label: 'Chinese' })),
+    ...findDuplicateNames(names.en).map((group) => ({ ...group, tree: 'en', label: 'English' })),
+  ]
+  const nameFileKeys = new Set()
+  for (const group of nameDuplicateGroups) {
+    const owners = group.entries.map((entry) => `assets/${group.tree}/${entry.key}.md`)
+    for (const entry of group.entries) nameFileKeys.add(entry.key)
+    // One note per duplicated name, naming every file that claims it: the fix is
+    // to rename all but one, and a note per file would read as two separate
+    // problems.
+    pushNote(notes, group.entries[group.entries.length - 1].key, note('error', 'name-uniqueness',
+      `${group.label} name "${group.name}" is claimed by ${owners.length} profiles: ${owners.join(', ')}`))
+  }
+  // Counted from the notes that were actually pushed, so this entry can never
+  // report pass while the hard-failure list of the same run names a duplicate.
+  const nameUniquenessErrors = notes.filter((entry) => entry.check === 'name-uniqueness' && entry.severity === 'error').length
+  checks.push({
+    id: 'name-uniqueness',
+    title: 'every expert name is unique across the whole roster, in both languages',
+    status: statusFor('name-uniqueness', nameUniquenessErrors, 0),
+    hardFailure: true,
+    notes: nameUniquenessErrors,
+    warnings: 0,
+    files: nameFileKeys.size,
+    duplicates: nameDuplicateGroups.map((group) => ({ tree: group.tree, name: group.name, keys: group.entries.map((entry) => entry.key) })),
+  })
+
+  for (const key of allKeys) {
+    const record = manifest.files[key]
+    const { division, slug, en: enPath, zh: zhPath } = pathsFor(key)
     const fileNotes = []
     const report = (severity, check, message) => {
       const entry = note(severity, check, message)
@@ -446,6 +449,7 @@ async function main() {
 
     const enPresent = await exists(enPath)
     if (!enPresent) {
+      drift.missing.push(key)
       report('error', 'english-byte-identity', 'assets/en file is missing')
       files.push({ key, division, slug, status: 'suspect', notes: fileNotes })
       continue
@@ -465,9 +469,11 @@ async function main() {
 
     // -- 3. byte identity ---------------------------------------------------
     if (record !== undefined && typeof record.enSha256 === 'string' && actualSha !== record.enSha256) {
+      drift.manifestMismatch.push(key)
       report('error', 'english-byte-identity', `en hash ${actualSha.slice(0, 12)} differs from the manifest baseline ${record.enSha256.slice(0, 12)}`)
     }
     if (record !== undefined && typeof record.bytes === 'number' && enBytes.length !== record.bytes) {
+      drift.byteMismatch.push(key)
       report('error', 'english-byte-identity', `en is ${enBytes.length} bytes, the manifest recorded ${record.bytes}`)
     }
     if (upstreamIndex !== null) {
@@ -483,13 +489,14 @@ async function main() {
     }
 
     // -- 10. code fences ----------------------------------------------------
+    // `unclosed` is the only signal: a fence line either pushes or pops the stack,
+    // so an odd number of fence lines implies a non-empty stack and is reported
+    // here twice over. There is no separate parity assertion (see corpus.mjs).
     const enStructure = structure(enText)
     if (enStructure.unclosed > 0) report('error', 'code-fences', `en: ${enStructure.unclosed} unclosed code fence(s), so the body is truncated from there on`)
-    if (!enStructure.fenceParityEven) report('error', 'code-fences', `en: ${enStructure.fenceLines} fence lines, which is an odd count`)
     const zhStructure = zhText === null ? null : structure(zhText)
-    if (zhStructure !== null) {
-      if (zhStructure.unclosed > 0) report('error', 'code-fences', `zh: ${zhStructure.unclosed} unclosed code fence(s), so the body is truncated from there on`)
-      if (!zhStructure.fenceParityEven) report('error', 'code-fences', `zh: ${zhStructure.fenceLines} fence lines, which is an odd count`)
+    if (zhStructure !== null && zhStructure.unclosed > 0) {
+      report('error', 'code-fences', `zh: ${zhStructure.unclosed} unclosed code fence(s), so the body is truncated from there on`)
     }
 
     if (zhText === null || zhStructure === null) {
@@ -503,11 +510,15 @@ async function main() {
     // pasted essay. The glossary is deliberately NOT applied to an intro: its
     // scope is derived from the whole English persona, so demanding every term
     // inside a short summary would be unsatisfiable.
-    const zhHasBody = stripFrontmatter(zhText).trim() !== ''
+    const zhHasBody = bodyOf(zhText).trim() !== ''
     const intro = typeof zhFront.fields.intro === 'string' ? zhFront.fields.intro.trim() : ''
     const introChars = cjkCount(intro)
+    const introSentences = intro === '' ? 0 : countSentences(intro)
     if (intro !== '' && (introChars < INTRO_MIN_CJK || introChars > INTRO_MAX_CJK)) {
       report('error', 'intro', `intro is ${introChars} CJK characters, outside ${INTRO_MIN_CJK}-${INTRO_MAX_CJK}`)
+    }
+    if (intro !== '' && (introSentences < INTRO_MIN_SENTENCES || introSentences > INTRO_MAX_SENTENCES)) {
+      report('error', 'intro', `intro is ${introSentences} sentence(s), outside ${INTRO_MIN_SENTENCES}-${INTRO_MAX_SENTENCES}`)
     }
     if (intro !== '' && intro === (zhFront.fields.description ?? '').trim()) {
       report('warn', 'intro', 'intro repeats description verbatim instead of introducing the expert')
@@ -526,7 +537,7 @@ async function main() {
     if (stale !== null) report(zhHasBody ? 'error' : 'warn', 'translation-freshness', stale)
 
     // -- 7 / 8 / 9 glossary and prose checks --------------------------------
-    const enBody = stripMarkup(stripFrontmatter(enText))
+    const enBody = stripMarkup(bodyOf(enText))
     const enPhrases = splitPhrases(enBody)
     const enWords = wordCount(enBody)
 
@@ -560,7 +571,7 @@ async function main() {
         if (enCount !== zhCount) report('error', 'heading-alignment', `h${level} count differs: en ${enCount} vs zh ${zhCount}`)
       }
 
-      const zhBody = stripMarkup(stripFrontmatter(zhText))
+      const zhBody = stripMarkup(bodyOf(zhText))
       zhChars = cjkCount(zhBody)
 
       const inScope = termIndex.filter((entry) => phraseContains(enPhrases, entry.key))
@@ -597,6 +608,7 @@ async function main() {
         enWords,
         zhChars,
         introChars,
+        introSentences,
         enBlocks: enStructure.blocks.length,
         zhBlocks,
         blockRatio: blockRatio === null ? null : Number(blockRatio.toFixed(3)),
@@ -610,24 +622,48 @@ async function main() {
     })
   }
 
+  const byteIdentityKeys = [...new Set([
+    ...drift.manifestMismatch,
+    ...drift.byteMismatch,
+    ...drift.drifted,
+    ...drift.upstreamMissing,
+    ...drift.missing,
+  ])]
+
   // -- roll-ups -------------------------------------------------------------
+  // The status of this entry is derived from the notes it produced, exactly as
+  // `summarize()` does for the other checks — including the manifest hash mismatch
+  // and the byte-count mismatch, which are errors of THIS check. While those stayed
+  // out of the state the status was computed from, a run could print PASS here and
+  // the same run's HARD FAILURES list, which is the shape docs/STATUS.md 5.16
+  // recorded. `drift` still carries the per-comparison counts and the samples.
+  const byteIdentityNotes = notes.filter((entry) => entry.check === 'english-byte-identity')
+  const byteIdentityErrors = byteIdentityNotes.filter((entry) => entry.severity === 'error')
+  const byteIdentityWarnings = byteIdentityNotes.filter((entry) => entry.severity === 'warn').length
   checks.push({
     id: 'english-byte-identity',
     title: 'assets/en is byte-identical to the upstream baseline commit',
-    status: drift.drifted.length === 0 && drift.upstreamMissing.length === 0 && !drift.unavailable ? 'pass' : 'fail',
+    status: statusFor('english-byte-identity', byteIdentityErrors.length, byteIdentityWarnings),
     hardFailure: true,
+    notes: byteIdentityErrors.length,
+    warnings: byteIdentityWarnings,
+    files: new Set(byteIdentityErrors.map((entry) => entry.fileKey)).size,
+    ...(drift.unavailable ? { detail: 'upstream checkout unavailable; compared against the manifest baseline only' } : {}),
     baselineCommit: manifest.upstream?.commit ?? null,
     upstreamHead,
     headMatchesBaseline: upstreamHead === null ? null : upstreamHead === manifest.upstream?.commit,
     compared: drift.compared,
     drifted: drift.drifted.length,
+    manifestMismatch: drift.manifestMismatch.length,
+    byteMismatch: drift.byteMismatch.length,
     upstreamMissing: drift.upstreamMissing.length,
+    missing: drift.missing.length,
     unverifiable: drift.unavailable,
-    samples: [...drift.drifted, ...drift.upstreamMissing].slice(0, 20),
+    samples: byteIdentityKeys.slice(0, 20),
   })
   checks.push(summarize(notes, 'manifest-coverage', 'every roster entry has a manifest record'))
   checks.push(summarize(notes, 'frontmatter', 'frontmatter is legal: name / description / intro / emoji present, quotes and fences balanced'))
-  checks.push(summarize(notes, 'intro', `every Chinese profile introduces its expert in ${INTRO_MIN_CJK}-${INTRO_MAX_CJK} CJK characters`))
+  checks.push(summarize(notes, 'intro', `every Chinese profile introduces its expert in ${INTRO_MIN_CJK}-${INTRO_MAX_CJK} CJK characters and ${INTRO_MIN_SENTENCES}-${INTRO_MAX_SENTENCES} sentences`))
   checks.push(summarize(notes, 'code-fences', 'code fences are paired'))
   checks.push(summarize(notes, 'translation-freshness', 'zh sourceSha256 is current (hard only when a translated persona body is present)'))
   checks.push(summarize(notes, 'block-alignment', 'translated bodies mirror the English top-level blocks exactly'))
@@ -697,8 +733,9 @@ async function main() {
   line('checks:')
   for (const check of checks) {
     const marker = check.status === 'pass' ? 'PASS' : check.status === 'warn' ? 'WARN' : check.status === 'fail' ? 'FAIL' : 'SUSP'
-    const count = check.id === 'english-byte-identity' ? check.drifted : (check.files ?? 0)
-    line(`  ${marker}  ${check.id.padEnd(24)} ${String(count).padStart(4)} file(s)  ${check.title}`)
+    // `files` is the shared count: the number of distinct subjects the check
+    // named. Every entry carries it, so no check needs a special case here.
+    line(`  ${marker}  ${check.id.padEnd(24)} ${String(check.files ?? 0).padStart(4)} file(s)  ${check.title}`)
   }
   line('')
   line(`roster:  ${report.totals.roster}`)
@@ -729,15 +766,59 @@ async function main() {
   }
 }
 
+/**
+ * The one status rule, so a hand-built entry and a `summarize()`d one cannot
+ * disagree with the hard-failure list they are both graded by. An error is a hard
+ * failure only for a check in HARD_FAILURE_CHECKS; anywhere else it is `suspect`,
+ * which is what keeps a missing translation from blocking a release.
+ * @param id - check id.
+ * @param errors - number of error notes this check produced.
+ * @param warnings - number of warn notes this check produced.
+ * @returns 'pass' | 'warn' | 'suspect' | 'fail'.
+ */
+function statusFor(id, errors, warnings) {
+  if (errors > 0) return HARD_FAILURES.has(id) ? 'fail' : 'suspect'
+  if (warnings > 0) return 'warn'
+  return 'pass'
+}
+
+/**
+ * Group profiles by normalised display name and return the names that more than
+ * one profile claims.
+ *
+ * The comparison mirrors `normalizeName` in src/catalog.ts exactly (NFKC, then
+ * trim, then lowercase), because the invariant this gate protects is the one the
+ * runtime relies on when it resolves an expert by name.
+ *
+ * @param entries - `{ key, name }` pairs, one per profile that has a name.
+ * @returns duplicate groups, each carrying every entry that claims the name.
+ */
+function findDuplicateNames(entries) {
+  const index = new Map()
+  for (const entry of entries) {
+    const normalized = String(entry.name ?? '').normalize('NFKC').trim().toLowerCase()
+    if (normalized === '') continue
+    const group = index.get(normalized)
+    if (group === undefined) index.set(normalized, { name: entry.name, entries: [entry] })
+    else group.entries.push(entry)
+  }
+  return [...index.values()].filter((group) => group.entries.length > 1)
+}
+
 function summarize(notes, id, title) {
   const scoped = notes.filter((entry) => entry.check === id && entry.fileKey !== undefined)
   const errors = scoped.filter((entry) => entry.severity === 'error')
   const warnings = scoped.filter((entry) => entry.severity === 'warn')
   const files = new Set([...errors, ...warnings].map((entry) => entry.fileKey))
-  let status = 'pass'
-  if (errors.length > 0) status = HARD_FAILURES.has(id) ? 'fail' : 'suspect'
-  else if (warnings.length > 0) status = 'warn'
-  return { id, title, status, hardFailure: HARD_FAILURES.has(id), notes: errors.length, warnings: warnings.length, files: files.size }
+  return {
+    id,
+    title,
+    status: statusFor(id, errors.length, warnings.length),
+    hardFailure: HARD_FAILURES.has(id),
+    notes: errors.length,
+    warnings: warnings.length,
+    files: files.size,
+  }
 }
 
 function countBy(values) {

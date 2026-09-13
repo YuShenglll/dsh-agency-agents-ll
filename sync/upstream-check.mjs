@@ -36,11 +36,21 @@ const manifestPath = path.join(projectRoot, 'sync', 'manifest.json')
 
 const EXIT = { upToDate: 0, moved: 1, failed: 2 }
 
+// Every git call is bounded, for the two ways this watcher could hang instead of
+// failing: a stalled proxy (the job used to sit there until GitHub's six-hour
+// ceiling) and git asking for credentials on a stdin that has no terminal to
+// answer it. The exit code stays 2 either way — "this check did not run" is not
+// "upstream has not moved".
+const GIT_TIMEOUT_MS = 120_000
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+
 function log(message) {
   process.stdout.write(`${message}\n`)
 }
 
 const sha256 = (buffer) => createHash('sha256').update(buffer).digest('hex')
+
+const describeError = (error) => (error instanceof Error ? error.message : String(error))
 
 /**
  * The probe cache is keyed by the repository it came from.
@@ -83,9 +93,15 @@ function removeTree(dir) {
 }
 
 function probe(command, args) {
-  const result = spawnSync(command, args, { encoding: 'utf8' })
+  const result = spawnSync(command, args, { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: GIT_ENV })
   if (result.error !== undefined && result.error !== null) {
-    return { ok: false, stdout: '', stderr: String(result.error.message ?? result.error) }
+    const message = result.error.code === 'ETIMEDOUT'
+      ? `${command} ${args.join(' ')} did not finish within ${GIT_TIMEOUT_MS / 1000}s`
+      : `${command} ${args.join(' ')} could not be started: ${describeError(result.error)}`
+    return { ok: false, stdout: '', stderr: message }
+  }
+  if (result.status === null && result.signal !== null && result.signal !== undefined) {
+    return { ok: false, stdout: '', stderr: `${command} ${args.join(' ')} was killed by ${result.signal}` }
   }
   return { ok: result.status === 0, stdout: (result.stdout ?? '').trim(), stderr: (result.stderr ?? '').trim() }
 }
@@ -139,10 +155,17 @@ function refreshProbe(repo) {
     }
   } catch (error) {
     // A half-cloned probe is not worth diagnosing: throw it away and take a
-    // fresh one, so the failure cannot become permanent.
+    // fresh one, so the failure cannot become permanent. The rebuild reports its
+    // own failure: with the clone's wording, a corrupt or undownloadable local
+    // cache read exactly like "that remote does not exist", and the two need
+    // different fixes.
     removeTree(probeDir)
-    run('git', ['clone', '--depth', '1', '--quiet', repo, probeDir])
-    if (process.env.DSH_DEBUG === '1') log(`probe rebuilt after: ${String(error)}`)
+    try {
+      run('git', ['clone', '--depth', '1', '--quiet', repo, probeDir])
+    } catch (rebuildError) {
+      throw new Error(`probe checkout ${probeDir} could not be refreshed (${describeError(error)}), and rebuilding it failed too: ${describeError(rebuildError)}`)
+    }
+    if (process.env.DSH_DEBUG === '1') log(`probe rebuilt after: ${describeError(error)}`)
   }
   return { dir: probeDir, commit: run('git', ['-C', probeDir, 'rev-parse', 'HEAD']) }
 }
@@ -204,7 +227,7 @@ function markdown(report, baseline) {
     if (report.divisionsAdded.length > 0) {
       out.push(`新增：${report.divisionsAdded.map((name) => `\`${name}\``).join('、')}`)
       out.push('')
-      out.push('分区同时登记在三处，要一起改：`src/names.ts`、`sync/glossary.json`、`scripts/verify.mjs`。')
+      out.push('分区同时登记在三处，要一起改：`src/names.ts`（`ZH_DIVISION` / `EN_DIVISION` 各一条）、`sync/glossary.json`（`division:<目录名>`）、`scripts/verify.mjs`（`DIVISIONS.length === 18`）。漏掉 `src/names.ts` 不会编译失败，界面会静默显示目录名。')
     }
     if (report.divisionsRemoved.length > 0) out.push(`移除：${report.divisionsRemoved.map((name) => `\`${name}\``).join('、')}`)
     out.push('')
@@ -293,7 +316,7 @@ async function main() {
         log(`  上游已删除 (${report.removed.length})：`)
         for (const key of report.removed) log(`    - ${key}`)
       }
-      if (report.divisionsAdded.length > 0) log(`  新增分区 (${report.divisionsAdded.length})：${report.divisionsAdded.join(', ')}（要改三处代码）`)
+      if (report.divisionsAdded.length > 0) log(`  新增分区 (${report.divisionsAdded.length})：${report.divisionsAdded.join(', ')}（需在 src/names.ts、sync/glossary.json、scripts/verify.mjs 三处登记）`)
       if (report.divisionsRemoved.length > 0) log(`  分区被移除 (${report.divisionsRemoved.length})：${report.divisionsRemoved.join(', ')}`)
       log('')
       log('下一步：pnpm sync:upstream —— 拉下来、列出还缺哪些中文档案，再跑门禁。')

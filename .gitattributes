@@ -10,8 +10,18 @@
 # existed: 279 of 279 English assets came out CRLF and 264 no longer matched
 # upstream.
 #
-# `-text` keeps the working tree byte-for-byte equal to what upstream ships,
-# which is NOT the same as `eol=lf`: some upstream files are CRLF, and forcing LF
-# on them would break the very identity this is protecting.
+# `-text` keeps the working tree byte-for-byte equal to what upstream ships, which
+# is NOT the same as `eol=lf`: `eol=lf` rewrites a CRLF file to LF on checkout,
+# which is exactly the transformation this is protecting against. The 279 English
+# assets measure 0 CRLF today; the contract must not depend on that staying true.
 assets/en/** -text
 assets/zh/** -text
+
+# `sync/manifest.json` is the same kind of content: it records the sha256 and the
+# byte count of every English asset, and it is the baseline `upstream:check`
+# compares against. It was missed when the two asset trees were pinned, so a
+# CRLF checkout left the working copy 1784 bytes larger than the committed blob
+# while `sameManifest()` normalised the difference away and the script never
+# rewrote the file. `sync.mjs` now rewrites it whenever the bytes differ, and this
+# line keeps git from producing the difference in the first place.
+sync/manifest.json -text

@@ -115,7 +115,7 @@ export function render(rows) {
     '',
     '**不允许**：`<image>`（内嵌位图）、`<text>`、`<foreignObject>`、`<script>`、`<style>`、`<mask>`、`<filter>`、`<pattern>`、任何外部引用。',
     '',
-    '**不要有 `id` 属性。** 279 张最终内联进**同一个客户端模块**，同名的 `id` 会互相覆盖。已有的 279 张都不含 `id`，这正是它们能直接拼在一起的原因。',
+    `**不要有 \`id\` 属性。** ${rows.length} 张最终内联进**同一个客户端模块**，同名的 \`id\` 会互相覆盖。已有的 ${rows.length} 张都不含 \`id\`，这正是它们能直接拼在一起的原因。`,
     '',
     '**请去掉编辑器元数据**：Figma / Sketch / Inkscape 的 `<metadata>`、`id="Layer_1"`、`xmlns:inkscape` 之类。跑一遍 SVGO 最好。',
     '',

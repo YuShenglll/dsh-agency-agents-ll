@@ -5,7 +5,7 @@
  * persona serves the English one and says so, rather than failing the summon.
  */
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { resolve, sep } from 'node:path'
 import { parseFrontmatter, type AssetRoots } from './catalog.js'
 import { formatHost, type LocaleId } from './i18n.js'
 
@@ -33,15 +33,52 @@ export function sanitizePersona(text: string): string {
   return text.replace(/\{(?=\{)/g, '{\u200b')
 }
 
-async function readBody(file: string): Promise<string | undefined> {
+/** What one persona file turned out to hold. */
+type BodyOutcome =
+  | { readonly kind: 'body'; readonly body: string }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'invalid' }
+
+/**
+ * Read one persona body, keeping "there is no such file" apart from "the file
+ * is there but carries no usable body". The two have different meanings to a
+ * reader: an absent archive is the ordinary intro-only case, while a malformed
+ * one is a content fault worth reporting.
+ *
+ * @param file - absolute path of the persona file.
+ * @returns the body, or why there is none.
+ */
+async function readBody(file: string): Promise<BodyOutcome> {
+  let raw: string
   try {
-    const parsed = parseFrontmatter(await readFile(file, 'utf8'))
-    if (parsed === undefined) return undefined
-    const body = parsed.body.trim()
-    return body === '' ? undefined : body
+    raw = await readFile(file, 'utf8')
   } catch {
-    return undefined
+    // Covers both "does not exist" and "cannot be read"; neither is a content fault.
+    return { kind: 'missing' }
   }
+  const parsed = parseFrontmatter(raw)
+  if (parsed === undefined) return { kind: 'invalid' }
+  const body = parsed.body.trim()
+  return body === '' ? { kind: 'invalid' } : { kind: 'body', body }
+}
+
+/**
+ * Resolve one persona file inside its asset tree.
+ *
+ * The Host tools pass a division and a slug taken from the roster itself, but
+ * the Remote endpoint receives both off the wire, so the pair is checked
+ * before it reaches the file system: a crafted slug must not read a `.md`
+ * anywhere outside the tree.
+ *
+ * @param root - the asset tree the file must live under.
+ * @param division - division directory as received.
+ * @param slug - expert slug as received.
+ * @returns the absolute file path, or `undefined` when the pair escapes `root`.
+ */
+function personaFile(root: string, division: string, slug: string): string | undefined {
+  const base = resolve(root)
+  const file = resolve(base, division, `${slug}.md`)
+  return file.startsWith(base + sep) ? file : undefined
 }
 
 /**
@@ -60,13 +97,21 @@ export async function loadPersona(
   slug: string,
   locale: LocaleId,
 ): Promise<LoadedPersona> {
-  if (locale === 'zh') {
-    const zh = await readBody(join(roots.zh, division, `${slug}.md`))
-    if (zh !== undefined) return { prompt: zh, locale: 'zh', fallback: false }
-  }
-  const en = await readBody(join(roots.en, division, `${slug}.md`))
-  if (en === undefined) {
+  const zhFile = personaFile(roots.zh, division, slug)
+  const enFile = personaFile(roots.en, division, slug)
+  // A pair that escapes either tree names no roster entry at all, so it is
+  // reported exactly like one: the caller learns nothing about the disk layout.
+  if (zhFile === undefined || enFile === undefined) {
     throw new Error(formatHost(locale, 'error.personaMissing', { division, slug }))
   }
-  return { prompt: en, locale: 'en', fallback: locale !== 'en' }
+  if (locale === 'zh') {
+    const zh = await readBody(zhFile)
+    if (zh.kind === 'body') return { prompt: zh.body, locale: 'zh', fallback: false }
+  }
+  const en = await readBody(enFile)
+  if (en.kind === 'body') return { prompt: en.body, locale: 'en', fallback: locale !== 'en' }
+  if (en.kind === 'invalid') {
+    throw new Error(formatHost(locale, 'error.personaInvalid', { division, slug }))
+  }
+  throw new Error(formatHost(locale, 'error.personaMissing', { division, slug }))
 }

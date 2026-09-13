@@ -8,6 +8,13 @@
 /** Settings namespace; also the join key between the Host section and the browser card. */
 export const SETTINGS_NS = 'agency-agents-ll'
 
+/**
+ * Settings namespace holding the DSH interface language. Owned by the harness and
+ * read by both halves of this plugin, so the literal has exactly one home here —
+ * a second copy would only be a way for the two halves to read different sections.
+ */
+export const LOCALE_NS = 'locale'
+
 /** Persona-prompt language preference. `auto` follows the DSH interface language. */
 export type PromptLocale = 'auto' | 'zh' | 'en'
 

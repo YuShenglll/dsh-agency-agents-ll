@@ -483,10 +483,10 @@ function ComposerButton(props: ComposerProps): React.ReactElement {
   const [open, setOpen] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const wrap = React.useRef<HTMLDivElement | null>(null)
-  const state = React.useSyncExternalStore(
-    (listener) => subscribeCatalog(props.remote, listener),
-    () => catalogState(props.remote),
-  )
+  // The cached pair, not a fresh one per render: an inline `subscribe` makes
+  // uSES resubscribe on every keystroke in the composer.
+  const subscription = catalogSubscription(props.remote)
+  const state = React.useSyncExternalStore(subscription.subscribe, subscription.getSnapshot)
   const enabled = state.snapshot === undefined ? [] : state.snapshot.experts.filter((expert) => state.enabled.has(expert.slug))
   const groups = groupByDivision(enabled, props.locale())
 
@@ -527,7 +527,11 @@ function ComposerButton(props: ComposerProps): React.ReactElement {
       onClick: () => { setError(null); setOpen((current) => !current) },
     }, React.createElement(SparkIcon, null), React.createElement('span', null, props.t('menu.button'))),
     open
-      ? React.createElement('div', { className: 'aall-menu', role: 'menu' },
+      // Not `role="menu"`: the panel carries division headings and a plain list
+      // of buttons, which that role does not allow, and the role would also
+      // promise arrow-key navigation this picker does not implement. A plain
+      // list is what it is, and every button is reachable by Tab.
+      ? React.createElement('div', { className: 'aall-menu' },
         error === null ? null : React.createElement('div', { className: 'aall-error', role: 'alert' }, error),
         groups.length === 0
           ? React.createElement('div', { className: 'aall-menu-empty' }, props.t('menu.empty'))
@@ -536,11 +540,76 @@ function ComposerButton(props: ComposerProps): React.ReactElement {
             group.experts.map((expert) => React.createElement('button', {
               key: expert.slug,
               type: 'button',
-              role: 'menuitem',
               className: 'aall-menu-item',
               onClick: () => { pick(expert) },
             }, React.createElement('span', null, expert.emoji), React.createElement('span', null, expert.name))))))
       : null)
+}
+
+// ---------------------------------------------------------------------------
+// Modal dialogs. All three share one keyboard contract.
+// ---------------------------------------------------------------------------
+
+/** Heading ids the three dialogs are named by; only one of them is ever open. */
+const PROMPT_TITLE_ID = 'aall-prompt-title'
+const EDITOR_TITLE_ID = 'aall-editor-title'
+const DELETE_TITLE_ID = 'aall-delete-title'
+
+/** Descendants a dialog's Tab order may visit, in DOM order. */
+const FOCUSABLE = 'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])'
+
+/**
+ * Modal keyboard contract, in the shape the composer menu already uses.
+ *
+ * Escape closes the dialog, focus starts inside it, and Tab cycles within it —
+ * without the last two, Tab walks onto the cards behind the overlay. Callers
+ * mount a dialog only while it is open, so both effects run once per open and
+ * never re-focus the box while the user is typing in it.
+ * @param onClose - invoked on Escape; omit it to keep the dialog modal while a
+ *   write is in flight.
+ * @returns the ref to attach to the dialog box, which also needs `tabIndex: -1`.
+ */
+function useDialog(onClose: (() => void) | undefined): React.MutableRefObject<HTMLDivElement | null> {
+  const box = React.useRef<HTMLDivElement | null>(null)
+  const close = React.useRef(onClose)
+  React.useEffect(() => { close.current = onClose })
+
+  React.useEffect(() => { box.current?.focus() }, [])
+
+  React.useEffect(() => {
+    const keydown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        close.current?.()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const root = box.current
+      if (root === null) return
+      const stops = [...root.querySelectorAll<HTMLElement>(FOCUSABLE)]
+      const first = stops[0]
+      const last = stops[stops.length - 1]
+      if (first === undefined || last === undefined) return
+      const active = document.activeElement
+      if (active === null || !root.contains(active)) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+        return
+      }
+      if (event.shiftKey && (active === first || active === root)) {
+        event.preventDefault()
+        last.focus()
+        return
+      }
+      if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', keydown)
+    return () => { document.removeEventListener('keydown', keydown) }
+  }, [])
+
+  return box
 }
 
 // ---------------------------------------------------------------------------
@@ -558,19 +627,56 @@ function PromptDialog(props: {
   readonly t: (key: AgencyClientKey) => string
   readonly onClose: () => void
 }): React.ReactElement {
+  const box = useDialog(props.onClose)
   return React.createElement('div', { className: 'aall-modal', role: 'presentation', onClick: props.onClose },
     React.createElement('div', {
+      ref: box,
+      tabIndex: -1,
       className: 'aall-dialog',
       role: 'dialog',
       'aria-modal': true,
-      'aria-label': props.view.title,
+      'aria-labelledby': PROMPT_TITLE_ID,
       onClick: (event: React.MouseEvent) => { event.stopPropagation() },
     },
       React.createElement('div', { className: 'aall-dialog-head' },
-        React.createElement('h3', { className: 'aall-dialog-title' }, props.view.title),
+        React.createElement('h3', { className: 'aall-dialog-title', id: PROMPT_TITLE_ID }, props.view.title),
         React.createElement('button', { type: 'button', className: 'aall-btn aall-btn-secondary', onClick: props.onClose }, props.t('prompt.close'))),
       props.view.note === null ? null : React.createElement('div', { className: 'aall-note', style: { padding: '10px 16px 0' } }, props.view.note),
       React.createElement('pre', { className: 'aall-prompt' }, props.view.body)))
+}
+
+interface ConfirmProps {
+  readonly title: string
+  readonly body: string
+  readonly busy: boolean
+  readonly t: (key: AgencyClientKey) => string
+  readonly onCancel: () => void
+  readonly onConfirm: () => void
+}
+
+/**
+ * The delete confirmation. It is a modal like the other two, so it carries the
+ * same keyboard contract and names itself from its own heading.
+ */
+function ConfirmDialog(props: ConfirmProps): React.ReactElement {
+  const close = props.busy ? undefined : props.onCancel
+  const box = useDialog(close)
+  return React.createElement('div', { className: 'aall-modal', role: 'presentation', onClick: close },
+    React.createElement('div', {
+      ref: box,
+      tabIndex: -1,
+      className: 'aall-dialog aall-dialog-narrow',
+      role: 'dialog',
+      'aria-modal': true,
+      'aria-labelledby': DELETE_TITLE_ID,
+      onClick: (event: React.MouseEvent) => { event.stopPropagation() },
+    },
+      React.createElement('div', { className: 'aall-dialog-head' },
+        React.createElement('h3', { className: 'aall-dialog-title', id: DELETE_TITLE_ID }, props.title)),
+      React.createElement('div', { className: 'aall-dialog-body' }, props.body),
+      React.createElement('div', { className: 'aall-dialog-foot' },
+        React.createElement('button', { type: 'button', className: 'aall-btn aall-btn-secondary', disabled: props.busy, onClick: props.onCancel }, props.t('custom.cancel')),
+        React.createElement('button', { type: 'button', className: 'aall-btn', disabled: props.busy, onClick: props.onConfirm }, props.t('custom.delete')))))
 }
 
 // ---------------------------------------------------------------------------
@@ -629,6 +735,9 @@ interface EditorProps {
 function CustomEditor(props: EditorProps): React.ReactElement {
   const { state, t } = props
   const draft = state.draft
+  // A write in flight makes the editor modal: Escape and the backdrop do nothing
+  // until it settles, which is what `props.busy` already refused for clicks.
+  const box = useDialog(props.busy ? undefined : props.onCancel)
 
   const textField = (key: 'name' | 'description' | 'emoji' | 'intro' | 'prompt', label: AgencyClientKey, options?: { readonly textarea?: boolean; readonly max?: number }): React.ReactElement => {
     const id = `aall-field-${key}`
@@ -650,14 +759,16 @@ function CustomEditor(props: EditorProps): React.ReactElement {
 
   return React.createElement('div', { className: 'aall-modal', role: 'presentation', onClick: props.busy ? undefined : props.onCancel },
     React.createElement('div', {
+      ref: box,
+      tabIndex: -1,
       className: 'aall-dialog',
       role: 'dialog',
       'aria-modal': true,
-      'aria-label': t(draft.slug === undefined ? 'custom.newTitle' : 'custom.editTitle'),
+      'aria-labelledby': EDITOR_TITLE_ID,
       onClick: (event: React.MouseEvent) => { event.stopPropagation() },
     },
       React.createElement('div', { className: 'aall-dialog-head' },
-        React.createElement('h3', { className: 'aall-dialog-title' }, t(draft.slug === undefined ? 'custom.newTitle' : 'custom.editTitle')),
+        React.createElement('h3', { className: 'aall-dialog-title', id: EDITOR_TITLE_ID }, t(draft.slug === undefined ? 'custom.newTitle' : 'custom.editTitle')),
         React.createElement('button', { type: 'button', className: 'aall-btn aall-btn-secondary', disabled: props.busy, onClick: props.onCancel }, t('custom.cancel'))),
       React.createElement('div', { className: 'aall-dialog-body' },
         props.error === null ? null : React.createElement('div', { className: 'aall-error', role: 'alert' }, props.error),
@@ -717,13 +828,14 @@ interface SectionProps extends PropsLocale<'agencyLL'> {
 const NO_PENDING: ReadonlySet<string> = new Set<string>()
 
 /**
- * The page's own failure floor.
+ * The failure floor every slot contribution sits on.
  *
- * `settings.section` is one slot entry, and the renderer retires an entry whose
+ * Each contribution is one slot entry, and the renderer retires an entry whose
  * component throws — permanently, for the life of the page. Catching here keeps
- * one bad render a visible message instead of an empty settings panel.
+ * one bad render a visible message instead of an empty settings panel or a
+ * composer button that never comes back.
  */
-class SectionBoundary extends React.Component<
+class SlotBoundary extends React.Component<
   { readonly t: SectionProps['t']; readonly onError: (error: Error) => void; readonly children?: React.ReactNode },
   { readonly error: Error | null }
 > {
@@ -805,7 +917,14 @@ const RosterCard = React.memo(function RosterCard(props: CardProps): React.React
             type: 'checkbox',
             className: 'aall-switch-input',
             checked: on,
-            disabled: props.pending || expert.conflict,
+            // A name conflict must never disable the switch. The Host keeps a
+            // conflicted slug in `enabled` (PLAN D18), so disabling here would
+            // strand an already-enabled expert: checked, unusable, and impossible
+            // to turn off. `slug` is the unique key, so storing it is always
+            // well-defined; what a conflict forbids is resolving the expert *by
+            // name*, which is why the badge explains it and the `@` picker
+            // refuses it — not this control.
+            disabled: props.pending,
             'aria-label': `${label} ${expert.name}`,
             onChange: () => { props.onToggle(expert) },
           }),
@@ -949,16 +1068,16 @@ function RosterSection(props: SectionProps): React.ReactElement {
   }
 
   const viewPrompt = React.useCallback((expert: ExpertSummary): void => {
-    void runWrite(async () => {
-      setPromptView({ title: t('prompt.title').replace('{name}', expert.name), body: t('prompt.loading'), note: null })
-      setPromptView(await readPrompt(expert))
-    })
+    // The dialog opens at once, so the click is still answered immediately; the
+    // read itself takes its turn in the queue like every other card action.
+    setPromptView({ title: t('prompt.title').replace('{name}', expert.name), body: t('prompt.loading'), note: null })
+    enqueue(expert.slug, async () => { setPromptView(await readPrompt(expert)) })
   // readPrompt closes over props.remote and t only; both are stable per face.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runWrite, props.remote, t])
+  }, [enqueue, props.remote, t])
 
   const copyPrompt = React.useCallback((expert: ExpertSummary): void => {
-    void runWrite(async () => {
+    enqueue(expert.slug, async () => {
       const view = await readPrompt(expert)
       try {
         await navigator.clipboard.writeText(view.body)
@@ -968,7 +1087,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runWrite, props.remote, t])
+  }, [enqueue, props.remote, t])
 
   const openEditor = React.useCallback((expert?: ExpertSummary): void => {
     const current = catalogState(props.remote)
@@ -1023,11 +1142,16 @@ function RosterSection(props: SectionProps): React.ReactElement {
     })
   }
 
+  /**
+   * The preference is written first and only then shown: the segmented control
+   * must not claim a language that was never stored. A dropped or failed write
+   * therefore leaves the control on the value that is actually in the document.
+   */
   const savePreference = (next: CatalogSnapshot['promptLocale']): void => {
-    setPreference(next)
     void runWrite(async () => {
       await props.promptLocaleScope.set('promptLocale', next)
       await refreshCatalog(props.remote)
+      setPreference(next)
     })
   }
 
@@ -1137,15 +1261,14 @@ function RosterSection(props: SectionProps): React.ReactElement {
       onSave: saveEditor,
       onDelete: () => { requestDelete(editor.draft.slug ?? '', editor.draft.name) },
     }),
-    pendingDelete === null ? null : React.createElement('div', { className: 'aall-modal', role: 'presentation' },
-      React.createElement('div', { className: 'aall-dialog aall-dialog-narrow', role: 'dialog', 'aria-modal': true },
-        React.createElement('div', { className: 'aall-dialog-head' },
-          React.createElement('h3', { className: 'aall-dialog-title' }, t('custom.deleteTitle'))),
-        React.createElement('div', { className: 'aall-dialog-body' },
-          t('custom.deleteConfirm').replace('{name}', pendingDelete.name)),
-        React.createElement('div', { className: 'aall-dialog-foot' },
-          React.createElement('button', { type: 'button', className: 'aall-btn aall-btn-secondary', disabled: busy, onClick: () => { setPendingDelete(null) } }, t('custom.cancel')),
-          React.createElement('button', { type: 'button', className: 'aall-btn', disabled: busy, onClick: () => { removeExpert(pendingDelete.slug) } }, t('custom.delete'))))))
+    pendingDelete === null ? null : React.createElement(ConfirmDialog, {
+      title: t('custom.deleteTitle'),
+      body: t('custom.deleteConfirm').replace('{name}', pendingDelete.name),
+      busy,
+      t,
+      onCancel: () => { setPendingDelete(null) },
+      onConfirm: () => { removeExpert(pendingDelete.slug) },
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -1223,12 +1346,12 @@ export function apply(ctx: ClientContext): void {
    */
   const registerContributions = (): void => {
     const reportRenderFailure = (error: Error): void => {
-      ctx.logger.warn(`[${PLUGIN_ID}] the roster page failed to render`, error)
+      ctx.logger.warn(`[${PLUGIN_ID}] a roster surface failed to render`, error)
     }
 
     ctx.slots.inject('settings.section', () => ctx.slots.register(
       { name: 'settings.section', id: SECTION_ID, order: 24, label: () => t('nav'), locale: NS },
-      (props: PropsLocale<'agencyLL'>) => React.createElement(SectionBoundary, {
+      (props: PropsLocale<'agencyLL'>) => React.createElement(SlotBoundary, {
         t: props.t,
         onError: reportRenderFailure,
       }, React.createElement(RosterSection, {
@@ -1249,11 +1372,16 @@ export function apply(ctx: ClientContext): void {
         // composer it is rendered next to rather than into "the current" one.
         inject: bindInsertion,
       },
-      (props: PropsLocale<'agencyLL'> & { readonly insertReference?: (reference: ReferenceInsert) => boolean }) => React.createElement(ComposerButton, {
+      // The same floor as the settings page: without it one throw in the button
+      // retires the `conversation.input.left` entry for the life of the page.
+      (props: PropsLocale<'agencyLL'> & { readonly insertReference?: (reference: ReferenceInsert) => boolean }) => React.createElement(SlotBoundary, {
+        t: props.t,
+        onError: reportRenderFailure,
+      }, React.createElement(ComposerButton, {
         ...props,
         remote: rosterRemote(),
         locale,
-      }),
+      })),
     ))
 
     ctx.effect(() => ctx.inputTriggers.registerSource({
@@ -1262,11 +1390,22 @@ export function apply(ctx: ClientContext): void {
       order: 200,
       showGroupTitle: true,
       candidates: async (_session, request) => {
-        const current = await refreshCatalog(rosterRemote()).catch(() => undefined)
+        // The held snapshot is the same data `onPick` and `lexicon` already read
+        // synchronously. Refreshing here would put the whole roster — all 279
+        // experts with their introductions — on the wire once per keystroke, so
+        // the Host is only asked when nothing has been read yet.
+        const held = catalogState(rosterRemote())
+        const current = held.snapshot === undefined
+          ? await refreshCatalog(rosterRemote()).catch(() => undefined)
+          : held
         if (current?.snapshot === undefined) return []
         const needle = normalizeQuery(request.query ?? '')
         return current.snapshot.experts
-          .filter((expert) => current.enabled.has(expert.slug) && matchesQuery(expert, needle))
+          // A conflicted expert shares its name with another entry, and a mention
+          // carries only the name: `resolveExpert` would refuse it as ambiguous.
+          // Offering it would insert a reference that can never be summoned, so
+          // the picker fails closed. The card already badges why it is unusable.
+          .filter((expert) => current.enabled.has(expert.slug) && !expert.conflict && matchesQuery(expert, needle))
           .map((expert) => ({
             name: candidateName(expert),
             description: expert.intro === '' ? expert.description : expert.intro.slice(0, 80),

@@ -403,7 +403,23 @@ const SOURCE_NAME = `${PLUGIN_ID}:@`   // 注册用它，每个引用也携带�
 
 ## 6. 环境要点（重开会话必读）
 
-- **`node` / `npm` 不在 PATH。** 一律用 `pnpm exec node <文件>` 或 `pnpm run <script>`；`pnpm`（11.8.0）由 DSH Desktop 的 runtime shim 提供，自带 Node v24.18.1。
+- **`node` / `npm` 不在 PATH。** `pnpm`（11.8.0）与 `node` 都由 DSH Desktop 的 runtime shim 提供。
+- **⚠️ 不要用 `pnpm` / `node` 的 `.cmd` shim 跑命令 —— 会弹出可见的 CMD 窗口，打断用户用电脑。**
+  实测（2026-09-13，用户报告后测得）：一轮完整门禁走 `pnpm.cmd` 会拉起 **11 个 `cmd.exe` / 7 个 `conhost.exe`，其中 1 个带可见窗口**。静置对照是 0。
+  **根因**：没有真的 `node.exe` —— `node.cmd` 只是设 `ELECTRON_RUN_AS_NODE=1` 再调 Electron；`pnpm.cmd` 同理。而 `pnpm run <script>` 还要为脚本再套几层 `cmd.exe`。
+  **绕开办法：直接调那个 exe，跳过批处理**，实测 **0 / 0 / 0**：
+
+  ```powershell
+  $exe = "G:\deepseek harness\DSH Desktop\DSH Desktop.exe"
+  $req = (Get-ChildItem "C:\Users\LL\AppData\Roaming\DSH Desktop\runtime-commands\generations\*\private\clear-env.cjs" | Select-Object -First 1).FullName
+  $env:ELECTRON_RUN_AS_NODE = '1'
+  & $exe --require $req scripts/verify.mjs        # 该等的时候用下面的写法
+  ```
+
+  各入口的真实路径：`node_modules/typescript/bin/tsc`、`node_modules/tsdown/dist/run.mjs`、`node_modules/vitest/vitest.mjs`，本仓库自己的脚本就是 `scripts/*.mjs` 与 `sync/*.mjs`。
+  **两个坑**：① `& $exe` 对 **GUI 子系统**程序**不会等待**，退出码和输出都拿不到 —— 要等就用
+  `Start-Process -NoNewWindow -Wait -PassThru -RedirectStandardOutput <文件>`；② 那个写法**不会给参数加引号**，路径里带空格（`DSH Desktop`）必须自己包 `"…"`。
+  **注意**：项目的 npm scripts 本身不用改 —— 人在正常终端里跑 `pnpm build` 时，那些 cmd 窗口是正常的、也是预期的。这只影响「从隐藏控制台里跑命令」的场景。
 - **Windows PowerShell 5.1 会把无 BOM 的 UTF-8 `.ps1` 按 ANSI 解码而乱码。** 含中文字面量的脚本必须先转成带 BOM 再执行（`run-all.ps1` 是现成范例）。
 - **不要用 `pwsh` 内联 `pnpm exec node -e "…"` 跑含正则或引号的脚本** —— PowerShell 会把它解析坏；写成 `%TEMP%` 下的临时 `.mjs` 再执行。
 - `dsh` 与 `pnpm` 的 shim 路径里含随版本变化的 `<hash>`，**脚本中不要硬编码**，用 `Get-Command` 解析。

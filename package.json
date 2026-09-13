@@ -41,6 +41,7 @@
     "verify": "pnpm avatars:inline && node scripts/verify.mjs",
     "sync": "node sync/sync.mjs",
     "sync:upstream": "node sync/upstream.mjs",
+    "upstream:check": "node sync/upstream-check.mjs",
     "authoring": "node sync/authoring.mjs",
     "check": "node sync/checks.mjs",
     "sync:stamp": "node sync/stamp.mjs",

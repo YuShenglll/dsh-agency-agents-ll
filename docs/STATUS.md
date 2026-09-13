@@ -565,6 +565,33 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 
 `git status` 干净**不等于**磁盘字节没被 git 动过。只要文件带哈希或字节一致性契约，就必须把它从 git 的行尾转换里摘出来，而且验证方式必须是**量字节**，不是问 `git status`。这个缺陷是被「模拟上游之后还原」这个动作顺手炸出来的 —— 如果没做那次演练，它会一直潜伏到某台新机器 clone 时才爆。
 
+## 5.17 「我怎么知道有更新」：`pnpm upstream:check` + 每日监视（2026-09-13）
+
+用户接着问「那我现在怎么知道有更新呢」。5.15 做的全都是**拉**模型 —— 不跑就不知道；而 `sync:upstream` 会拉取并写盘，为了「看一眼」去跑它并不合适。补了两层。
+
+**`sync/upstream-check.mjs`（新，`pnpm upstream:check`）—— 只查，不写盘：**
+
+1. `git ls-remote <repo> HEAD`，一次请求、零磁盘。与 `sync/manifest.json` 记的基线一致就直接结束：实测 **2.1 秒**，连缓存目录都没建。
+2. 只有远端动了，才浅克隆到 `sync/.cache/upstream-probe-<仓库哈希>/`，把它那份名册与 manifest 逐位比对，报出新增 / 改动 / 删除的专家与分区变化。
+
+退出码 `0`（没变）/ `1`（变了）/ `2`（**没查成**）。**`2` 绝不能被当成「没变」** —— 监视坏掉的那天，那样会让你以为天下太平。
+
+**`.github/workflows/upstream-watch.yml`（新）——** 每天 01:23 UTC 在 GitHub 自己的机器上跑一次：名册变了就开 issue（正文由 `--markdown` 生成，GitHub 邮件通知你），没变就关掉遗留 issue，**查不动就让工作流失败**。注意 GitHub 会在仓库 60 天无活动后暂停 schedule 工作流（暂停前会通知）。
+
+### 写这个脚本时踩到的两个坑
+
+**① 探测缓存必须按仓库区分。** 第一版用固定目录 `sync/.cache/upstream-probe`。测试时我把 manifest 指向另一份模拟上游，它却照样去 fetch **旧**仓库（`origin` 还指着旧的），于是给出一个**看起来完全合理**的错误答案 —— 我第一反应是「测试用例写错了」，实际是脚本在静默答错。改成目录名带仓库哈希（`upstream-probe-<sha256(repo) 前 8 位>`）之后，换远端天然换目录，连「检测并删除陈旧缓存」这条易碎逻辑都不需要了。
+
+**② Windows 上 `fs.rmSync` 删不掉一个 git 仓库（EPERM）。** git 的对象文件是只读的。给「损坏缓存」准备的重建路径必须先把只读属性清掉再删（脚本里的 `removeTree`）。
+
+### 它被验证到什么程度
+
+`upstream:check` 四个分支都真跑过：真实 GitHub 上游（0）、名册与基线一致但远端有新提交的副本（0）、含 4 类改动的模拟上游（1）、不存在的远端（2）。
+
+工作流的 shell 逻辑用**桩 `gh`** 在本地 Git bash 里跑了五个用例，断言每次的调用序列：无 issue 时 create；正文相同则**不 edit**（否则每天骚扰你一次）；正文不同才 edit；名册没变时 close；都没有则什么都不做。YAML 用 pnpm store 里的 `js-yaml` 解析并断言了结构（两个分支条件互斥且完整、`probe` 步骤确实写 `GITHUB_OUTPUT`）。
+
+**唯一没验的是工作流本身在 GitHub 上真跑** —— 那要等它按 cron 自己触发，或手动 Run workflow 一次。
+
 ## 6. 环境要点（重开会话必读）
 
 - **`core.autocrlf = true`（系统级 gitconfig 的默认值）会把 checkout 出来的文件写成 CRLF，而 `git status` 看不出来。** 见 5.16。`assets/en`、`assets/zh` 已用 `.gitattributes` 钉成 `-text`，但**其它文件仍会被转换** —— 今后任何「对字节有契约」的新目录都要一起钉住。要判断磁盘真实字节就用 `[System.IO.File]::ReadAllBytes`，别问 git。另外 `git checkout -- <file>` 对 git 认为「干净」的文件是**空操作**（这正是当时没能把它改回来的原因），要强制重写必须先删掉再 checkout，或者用 `-c core.autocrlf=false`。
@@ -599,6 +626,7 @@ pnpm exec vitest run    # 60 项：remote 13 + host 24 + 客户端 jsdom 23
 pnpm verify             # 34 项发布门禁
 pnpm check              # 12 项机械门禁 → sync/report.json
 pnpm sync               # 拉上游英文资产、刷新 manifest（幂等，离线）
+pnpm upstream:check     # 上游名册动了吗？秒级、不写盘（0 没变 / 1 变了 / 2 没查成）
 pnpm sync:upstream      # 上游更新一条龙：fetch+快进 -> 同步 -> 待办清单 -> 12 项门禁
 pnpm authoring          # 只看待办：还需要人工补写哪些中文档案/头像（见 UPDATE.md）
 pnpm sync:stamp         # 为中文档案盖 sourceSha256（从磁盘推导）

@@ -1,0 +1,80 @@
+name: 上游名册监视
+
+# 每天问一次上游仓库：名册动了吗？
+#
+# 动了就开一个 issue（GitHub 会发通知给你，这是「我怎么知道有更新」的答案 ——
+# 不用问，它会来找你），跟上游同步好之后自动关闭。只改了文档、没动名册的提交
+# 不会打扰你，因为判定用的是「名册有没有变」，不是「有没有新提交」。
+#
+# 判定逻辑就是 pnpm upstream:check，和本地手动跑的是同一份代码：
+#   退出码 0 = 名册没变      → 关掉遗留的 issue
+#   退出码 1 = 名册变了      → 开 issue / 更新正文
+#   退出码 2 = 这次没查成    → 让工作流失败，GitHub 会通知你「监视本身坏了」
+#     （这种情况下绝不当成「没有更新」，否则监视坏掉时你会以为天下太平）
+#
+# 两个平台注意事项：
+#   * GitHub 会在仓库 60 天没有任何活动后暂停 schedule 工作流，暂停前会通知你。
+#     手动跑一次：Actions 页面 → 上游名册监视 → Run workflow。
+#   * cron 用的是 UTC。下面是 01:23 UTC = 北京时间 09:23，避开整点以缩短排队。
+
+on:
+  schedule:
+    - cron: '23 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 检查上游名册
+        id: probe
+        run: |
+          set +e
+          node sync/upstream-check.mjs --markdown > body.md
+          code=$?
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "upstream:check 退出码 = $code"
+
+      - name: 开或关 issue
+        if: ${{ steps.probe.outputs.code != '2' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODE: ${{ steps.probe.outputs.code }}
+        run: |
+          set -euo pipefail
+          gh label create upstream-watch --force \
+            --description "上游名册监视自动维护" --color FBCA04 >/dev/null
+
+          number=$(gh issue list --label upstream-watch --state open --limit 1 \
+            --json number --jq '.[0].number // empty')
+
+          if [ "$CODE" = "1" ]; then
+            if [ -z "$number" ]; then
+              gh issue create --title "[上游] 名册有更新" --label upstream-watch --body-file body.md
+            else
+              # 只在内容真的变了时才改，否则每天都会给你发一次通知。
+              current=$(gh issue view "$number" --json body --jq .body)
+              if [ "$current" != "$(cat body.md)" ]; then
+                gh issue edit "$number" --body-file body.md
+              fi
+            fi
+          elif [ -n "$number" ]; then
+            gh issue close "$number" --comment "上游名册与本地基线已无差异，自动关闭。"
+          fi
+
+      - name: 监视本身失败
+        if: ${{ steps.probe.outputs.code == '2' }}
+        run: |
+          echo "::error::upstream:check 没能完成（网络或 git 故障）。这次没查成，不代表上游没有更新。"
+          exit 1

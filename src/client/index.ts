@@ -253,32 +253,34 @@ const CSS = `
 .aall-error{color:var(--dsw-alias-state-error-primary);font-size:13px;line-height:20px}
 .aall-note{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .aall-empty{padding:24px 16px;border:1px dashed var(--dsw-alias-border-l2);border-radius:12px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;text-align:center}
-.aall-group{display:flex;flex-direction:column;gap:8px}
-.aall-group-title{display:flex;align-items:baseline;gap:8px;margin:0;font-size:14px;line-height:20px;font-weight:650}
-.aall-group-count{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400}
-.aall-list{display:flex;flex-direction:column;gap:8px}
+.aall-group{display:flex;flex-direction:column;gap:6px}
+.aall-group-title{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;margin:0;padding:8px 0 6px;font-size:16px;line-height:22px;font-weight:650;background:var(--dsw-alias-bg-layer-2);border-bottom:1px solid var(--dsw-alias-border-l2)}
+.aall-group-title::before{content:"";flex:0 0 auto;width:3px;height:16px;border-radius:2px;background:var(--dsw-alias-label-primary)}
+.aall-group-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;padding:0 6px;border-radius:9px;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px;font-weight:600}
+.aall-list{display:flex;flex-direction:column;gap:6px}
 .aall-card{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-2)}
 .aall-card[data-enabled="true"]{border-color:var(--dsw-alias-state-success-primary)}
-.aall-card-body{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;padding:12px}
+.aall-card-body{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;padding:10px 12px}
 .aall-emoji{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--dsw-alias-bg-layer-3);font-size:18px}
 .aall-identity{min-width:0}
 .aall-name{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:15px;font-weight:650;line-height:22px}
 .aall-name-en{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400}
-.aall-division{margin-top:2px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
-.aall-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.aall-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px}
+.aall-division{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
+.aall-badges{display:flex;flex-wrap:wrap;gap:6px}
 .aall-badge{padding:1px 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
-.aall-intro{margin:8px 0 0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:21px;white-space:pre-wrap}
-.aall-description{margin:6px 0 0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
-.aall-switch{position:relative;align-self:start;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.aall-intro{margin:6px 0 0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;white-space:pre-wrap}
+.aall-description{margin:4px 0 0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
+.aall-switch{position:relative;align-self:start;display:inline-flex;align-items:center;cursor:pointer}
 .aall-switch-input{position:absolute;inset:0;width:1px;height:1px;margin:0;padding:0;opacity:0;pointer-events:none}
 .aall-switch-track{position:relative;display:block;width:40px;height:22px;border:1px solid var(--dsw-alias-border-l3);border-radius:11px;background:var(--dsw-alias-bg-layer-3);transition:background 160ms ease,border-color 160ms ease}
 .aall-switch-track::after{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--dsw-alias-label-secondary);content:"";transition:transform 160ms ease,background 160ms ease}
 .aall-switch-input:checked+.aall-switch-track{border-color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 32%,transparent)}
 .aall-switch-input:checked+.aall-switch-track::after{transform:translateX(18px);background:var(--dsw-alias-label-primary)}
 .aall-switch-input:disabled+.aall-switch-track{opacity:.5}
-.aall-card-foot{display:flex;flex-wrap:wrap;gap:12px;padding:0 12px 12px}
-.aall-link{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:18px;cursor:pointer;text-decoration:underline}
-.aall-link:hover:not(:disabled){color:var(--dsw-alias-label-primary)}
+.aall-card-foot{display:flex;flex-wrap:wrap;gap:8px;padding:0 12px 10px}
+.aall-link{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:18px;cursor:pointer}
+.aall-link:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .aall-link:disabled{opacity:.5;cursor:default}
 .aall-modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.56)}
 .aall-dialog{display:flex;flex-direction:column;box-sizing:border-box;width:min(760px,100%);max-height:min(720px,100%);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-2));box-shadow:var(--dsw-shadow-lv3)}
@@ -291,6 +293,7 @@ const CSS = `
 .aall-fieldset{display:flex;flex-direction:column;gap:6px}
 .aall-textarea{min-height:160px;padding:8px 10px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.6}
 .aall-check{display:inline-flex;align-items:center;gap:8px;font-size:13px}
+.aall-check-control{min-height:34px;color:var(--dsw-alias-label-secondary);font-size:13px;cursor:pointer}
 .aall-btn-wrap{position:relative;display:inline-flex;flex:0 0 auto}
 .aall-menu{position:absolute;bottom:calc(100% + 6px);left:0;z-index:10000;box-sizing:border-box;display:flex;flex-direction:column;width:280px;max-height:min(420px,60vh);overflow:auto;padding:4px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-2));box-shadow:var(--dsw-shadow-lv3)}
 .aall-menu-group{padding:6px 10px 2px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
@@ -351,11 +354,11 @@ function SparkIcon(): React.ReactElement {
 }
 
 function CopyIcon(): React.ReactElement {
-  return lineIcon(12, 'M9 9h9v9H9zM6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1')
+  return lineIcon(14, 'M9 9h9v9H9zM6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1')
 }
 
 function EyeIcon(): React.ReactElement {
-  return lineIcon(12, 'M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z')
+  return lineIcon(14, 'M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z')
 }
 
 function PlusIcon(): React.ReactElement {
@@ -698,15 +701,19 @@ const RosterCard = React.memo(function RosterCard(props: CardProps): React.React
         React.createElement('div', { className: 'aall-name' },
           React.createElement('span', null, expert.name),
           expert.nameEn === expert.name ? null : React.createElement('span', { className: 'aall-name-en' }, expert.nameEn)),
-        React.createElement('div', { className: 'aall-division' }, groupLabel(expert.division, props.locale)),
-        React.createElement('div', { className: 'aall-badges' },
-          expert.custom ? React.createElement('span', { className: 'aall-badge' }, t('badge.custom')) : null,
-          React.createElement('span', { className: 'aall-badge' }, t(expert.translated ? 'badge.translated' : 'badge.notTranslated')),
-          expert.conflict ? React.createElement('span', { className: 'aall-badge' }, t('badge.conflict')) : null),
+        React.createElement('div', { className: 'aall-meta' },
+          React.createElement('span', { className: 'aall-division' }, groupLabel(expert.division, props.locale)),
+          React.createElement('div', { className: 'aall-badges' },
+            expert.custom ? React.createElement('span', { className: 'aall-badge' }, t('badge.custom')) : null,
+            React.createElement('span', { className: 'aall-badge' }, t(expert.translated ? 'badge.translated' : 'badge.notTranslated')),
+            expert.conflict ? React.createElement('span', { className: 'aall-badge' }, t('badge.conflict')) : null)),
         React.createElement('p', { className: 'aall-intro' },
           React.createElement('strong', null, `${t('card.introHeading')}: `),
           expert.intro.trim() === '' ? t('card.introMissing') : expert.intro),
         React.createElement('p', { className: 'aall-description' }, expert.description)),
+      // The switch carries no text label: the track and the card border already
+      // say on or off, and the freed column lets the introduction reach further
+      // right, which is what shortens every card.
       React.createElement('label', { className: 'aall-switch', title: label },
         React.createElement('input', {
           type: 'checkbox',
@@ -716,15 +723,17 @@ const RosterCard = React.memo(function RosterCard(props: CardProps): React.React
           'aria-label': `${label} ${expert.name}`,
           onChange: () => { props.onToggle(expert) },
         }),
-        React.createElement('span', { className: 'aall-switch-track' }),
-        React.createElement('span', { className: 'aall-label' }, t(on ? 'enabled' : 'disabled')))),
+        React.createElement('span', { className: 'aall-switch-track' }))),
     React.createElement('div', { className: 'aall-card-foot' },
       React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onView(expert) } },
         React.createElement(EyeIcon, null), React.createElement('span', null, t('card.viewPrompt'))),
       React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onCopy(expert) } },
         React.createElement(CopyIcon, null), React.createElement('span', null, t(props.copied ? 'card.copied' : 'card.copyPrompt'))),
-      React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onEdit(expert) } },
-        t(expert.custom ? 'custom.edit' : 'custom.add')),
+      // Shipped experts have nothing to edit, so they show no third action; the
+      // page header owns "new custom expert".
+      expert.custom
+        ? React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onEdit(expert) } }, t('custom.edit'))
+        : null,
       expert.custom
         ? React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onDelete(expert) } }, t('custom.delete'))
         : null))
@@ -738,6 +747,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
   const [loading, setLoading] = React.useState(state.snapshot === undefined)
   const [query, setQuery] = React.useState('')
   const [division, setDivision] = React.useState('')
+  const [enabledOnly, setEnabledOnly] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [pending, setPending] = React.useState<ReadonlySet<string>>(NO_PENDING)
   const [error, setError] = React.useState<string | null>(null)
@@ -936,7 +946,8 @@ function RosterSection(props: SectionProps): React.ReactElement {
   // Roster order, deliberately: re-sorting enabled entries to the front moved
   // rows out from under the pointer on every write. Enabled state is carried by
   // the switch, the card border and the summary count instead.
-  const filtered = filterExperts(experts, division, query)
+  const scoped = enabledOnly ? experts.filter((expert) => enabled.has(expert.slug)) : experts
+  const filtered = filterExperts(scoped, division, query)
   const groups = groupByDivision(filtered, locale)
   const customCount = experts.filter((expert) => expert.custom).length
 
@@ -984,6 +995,14 @@ function RosterSection(props: SectionProps): React.ReactElement {
           value: division,
           onChange: (event: React.ChangeEvent<HTMLSelectElement>) => { setDivision(event.target.value) },
         }, divisionOptions(experts, locale).map((option) => React.createElement('option', { key: option.value, value: option.value }, option.label)))),
+      React.createElement('label', { className: 'aall-check aall-check-control' },
+        React.createElement('input', {
+          type: 'checkbox',
+          checked: enabledOnly,
+          disabled: busy,
+          onChange: (event: React.ChangeEvent<HTMLInputElement>) => { setEnabledOnly(event.target.checked) },
+        }),
+        t('filter.enabledOnly')),
       React.createElement('div', { className: 'aall-field aall-field-narrow' },
         React.createElement('span', { className: 'aall-label' }, t('promptLocale.label')),
         React.createElement('div', { className: 'aall-segmented', role: 'group', 'aria-label': t('promptLocale.label') },
@@ -1004,7 +1023,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
           React.createElement('button', {
             type: 'button',
             className: 'aall-btn aall-btn-secondary',
-            onClick: () => { setQuery(''); setDivision('') },
+            onClick: () => { setQuery(''); setDivision(''); setEnabledOnly(false) },
           }, t('emptyFilter.reset'))))
       : groups.map((group) => React.createElement('section', { className: 'aall-group', key: group.division },
         React.createElement('h3', { className: 'aall-group-title' },

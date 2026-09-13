@@ -327,6 +327,56 @@ describe('roster page presentation', () => {
     expect(DICTIONARIES.zh['menu.title']).toBe('召唤专家')
     expect(DICTIONARIES.zh['nav']).toBe('专家库')
   })
+
+  it('gives every division heading a sticky band with its count', async () => {
+    const remote = createRemote(roster())
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    expect(container.querySelectorAll('.aall-group-title').length).toBe(18)
+    expect(container.querySelector('.aall-group-title')?.textContent).toContain('学术')
+    expect(container.querySelector('.aall-group-count')?.textContent).toBe('15')
+  })
+
+  it('keeps the card switch label-free so the introduction reaches further right', async () => {
+    const remote = createRemote(roster())
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    const card = container.querySelector('.aall-card')
+    expect(card?.querySelector('.aall-label'), 'the switch carries no text label').toBeNull()
+    // The state still reaches assistive tech through the input's own name.
+    const input = card?.querySelector<HTMLInputElement>('.aall-switch-input')
+    expect(input?.getAttribute('aria-label')).toContain('启用')
+  })
+
+  it('offers exactly two actions on a shipped expert', async () => {
+    const remote = createRemote(roster())
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    const foot = container.querySelector('.aall-card .aall-card-foot')
+    const labels = [...(foot?.querySelectorAll('.aall-link') ?? [])].map((node) => node.textContent)
+    expect(labels).toEqual(['查看提示词', '复制提示词'])
+    // Creating a custom expert stays a single page-level entry point.
+    expect(container.querySelector('.aall-actions')?.textContent).toContain('新建自定义专家')
+  })
+
+  it('narrows the roster to enabled experts only', async () => {
+    const experts = await shippedRoster()
+    const remote = createRemote(experts)
+    remote.catalog = { ...remote.catalog, enabled: ['academic-historian'] }
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+    expect(container.querySelectorAll('.aall-card').length).toBe(279)
+
+    const box = [...container.querySelectorAll<HTMLInputElement>('.aall-check-control input')][0]
+    expect(box, 'the enabled-only filter must exist').toBeDefined()
+    await act(async () => { box!.click(); await Promise.resolve() })
+
+    expect(container.querySelectorAll('.aall-card').length, 'only the enabled expert remains').toBe(1)
+    expect(container.querySelector('.aall-name')?.textContent).toContain('历史学家')
+  })
 })
 
 describe('roster page stays usable while a write is in flight', () => {

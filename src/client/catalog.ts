@@ -90,7 +90,21 @@ function publish(remote: AgencyRosterRemote, snapshot: CatalogSnapshot): Catalog
   return entry.value
 }
 
-/** Accept a write answer, which already carries the new snapshot. */
+/**
+ * Accept a write answer, which already carries the new snapshot.
+ *
+ * Deliberately unordered. This is only ever called by the whole-table writes —
+ * saving or deleting a custom expert — and those run inside the page's
+ * single-flight gate (`runWrite`), so two of them are never in flight together.
+ * The precondition is what makes it safe, and it is not obvious from here: a
+ * second caller would have to bring its own ordering (a write id, as
+ * {@link acceptEnabled} takes) or its own gate, otherwise an older whole-table
+ * answer could land on top of a newer state.
+ *
+ * @param remote - mounted Remote face.
+ * @param snapshot - the snapshot the write returned.
+ * @returns the accepted state.
+ */
 export function acceptCatalog(remote: AgencyRosterRemote, snapshot: CatalogSnapshot): CatalogState {
   return publish(remote, snapshot)
 }

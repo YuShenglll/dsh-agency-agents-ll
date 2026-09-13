@@ -6,9 +6,8 @@
 
 插件已建成并**在 desktop profile 上运行**：DeepSeek Harness 的中英双语 Agency 专家名册，279 位专家 / 18 个分区，中文名与中文简介齐备，提示词语言可切换，Host 工具与浏览器端均可用。
 
-> **现在唯一还没验的**：**卡片头像在浅色与深色主题下的真机效果**（见 5.10）。
-> 素材本身 279/279 通过全部格式校验，也已在浏览器里接上，但没有人用眼睛在真实卡片里看过。
-> 除这件事以外没有进行中的改动，工作区干净。
+> **现在唯一还没验的**：浏览器端的交互细节（搜索/筛选、`@` 菜单、自定义专家编辑器）—— 只有用户口述的「基本功能实现」，没有截图或 Playwright。见第 4 节。
+> 基础设施与四条工具路径均已实测通过；除上面这条以外没有进行中的改动，工作区干净。
 > 除这件事以外没有任何进行中的改动，工作区干净。
 
 > **5.6–5.9 是同一个问题的四轮收敛**：设置面板的滚动条随名册长短出现/消失，内容框宽度差 8px。
@@ -33,7 +32,7 @@
 
 ```
 pnpm build   exit=0
-pnpm test    59 passed   （remote 13 + host 24 + client/jsdom 22）
+pnpm test    60 passed   （remote 13 + host 24 + client/jsdom 23）
 pnpm verify  exit=0      34 项
 pnpm check   exit=0      12 项，roster 279 / aligned 279 / suspect 0 / missing 0
 ```
@@ -67,19 +66,18 @@ describe_expert(上线就绪度评审专家)
 
 ## 4. 尚未实测的路径
 
-诚实清单，别当成已验证：
+诚实清单，别当成已验证。**四条工具路径已全部真跑过**（见第 3 节），下面剩下的都是浏览器端交互：
 
 | 项 | 状态 |
 |---|---|
-| `summon_expert` / `summon_experts` 真实召唤一位专家 | 未跑过（需要一次真实的子代理运行） |
 | 浏览器端：设置页渲染、搜索/筛选、查看复制提示词 | 用户口述「基本功能实现」，无截图或 Playwright |
 | 浏览器端：`@` 触发菜单、自定义专家编辑器 | 同上 |
 | 客户端 `ctx.settingsScope.bind({ namespace })` 是否真能写 `promptLocale` | 未单独验证；失败时会显示 `error.save`，不会静默 |
 | Remote 的真实 HTTP 路由 | 用户的设置页能用即间接证明可达 |
-| 启用停用（2026-09-13 修复后） | 由 21 条 jsdom 组件测试覆盖，其中 3 条在修复前必失败；**仍需一次真机复测** |
+| 启用停用（2026-09-13 修复后） | 由 23 条 jsdom 组件测试覆盖，其中 3 条在修复前必失败；**仍需一次真机复测** |
 | `.aall-switch` 绝对定位输入的包含块 | 已加 `position:relative` 兜底；未确认宿主对 `input[type=checkbox]` 是否有更高优先级的全局规则 |
 | 卡片宽度随滚动条变 8px | **5.9 已治并经用户实测确认**。若日后复发，剩下的两手见 5.9 末尾 |
-| 头像素材 | 等交付。到了之后要验证：slug 全覆盖、单文件 ≤ 5 KB、渲染在**内切圆**内不溢出、浅色与深色主题下都看得清 |
+| 头像素材 | **已完成**，见 5.10：279/279 交付、格式全过、明暗主题均已真机确认 |
 
 ## 5. 2026-09-13 的修复与优化记录
 
@@ -413,7 +411,7 @@ const SOURCE_NAME = `${PLUGIN_ID}:@`   // 注册用它，每个引用也携带�
 ```powershell
 cd G:\dsh\dsh-agency-agents-ll
 pnpm build              # typecheck + tsdown（Host ESM / 客户端 ModuleLoader CJS）
-pnpm exec vitest run    # 59 项：remote 13 + host 24 + 客户端 jsdom 22
+pnpm exec vitest run    # 60 项：remote 13 + host 24 + 客户端 jsdom 23
 pnpm verify             # 34 项发布门禁
 pnpm check              # 12 项机械门禁 → sync/report.json
 pnpm sync               # 拉上游英文资产、刷新 manifest（幂等）
@@ -469,7 +467,7 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 
 - 改 Host 逻辑 → `src/index.ts`（工具与 catalog）、`src/remote.ts`（Remote 方法）、`src/roster-settings.ts`（enabled 与自定义专家）
 - 改浏览器端 → `src/client/index.ts`（页面与触发器）、`src/client/locales.ts`（词条，zh 为 key 集真源，en 由 `satisfies` 编译期强制一致）
-- 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 **22 条**在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」「滚动条一来自适应布局就跑偏」「data URI 里漏了个 `#` 转义」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰
+- 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 **23 条**在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」「滚动条一来自适应布局就跑偏」「data URI 里漏了个 `#` 转义」「引用 source 名与注册名不一致」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰
 - 改资产或术语 → 动 `assets/`、`sync/glossary.json` 后必须跑 `pnpm sync:stamp && pnpm check`
 - **改头像素材** → 动 `assets/avatar/` 之后**必须跑 `pnpm avatars:inline`**，否则 `pnpm verify` 会红（它逐字节比对生成文件与素材树）。**不要手改 `src/client/avatars.ts`** —— 那是生成文件
 - 改契约 → 先改 `docs/PLAN.md` 再改代码

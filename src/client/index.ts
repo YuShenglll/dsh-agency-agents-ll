@@ -260,7 +260,8 @@ const CSS = `
 .aall-list{display:flex;flex-direction:column;gap:6px}
 .aall-card{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-2)}
 .aall-card[data-enabled="true"]{border-color:var(--dsw-alias-state-success-primary)}
-.aall-card-body{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;padding:10px 12px}
+.aall-card-body{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
+.aall-card-head{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:start}
 .aall-emoji{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--dsw-alias-bg-layer-3);font-size:18px}
 .aall-identity{min-width:0}
 .aall-name{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:15px;font-weight:650;line-height:22px}
@@ -269,8 +270,8 @@ const CSS = `
 .aall-division{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .aall-badges{display:flex;flex-wrap:wrap;gap:6px}
 .aall-badge{padding:1px 6px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
-.aall-intro{margin:6px 0 0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;white-space:pre-wrap}
-.aall-description{margin:4px 0 0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
+.aall-intro{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;white-space:pre-wrap}
+.aall-description{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
 .aall-switch{position:relative;align-self:start;display:inline-flex;align-items:center;cursor:pointer}
 .aall-switch-input{position:absolute;inset:0;width:1px;height:1px;margin:0;padding:0;opacity:0;pointer-events:none}
 .aall-switch-track{position:relative;display:block;width:40px;height:22px;border:1px solid var(--dsw-alias-border-l3);border-radius:11px;background:var(--dsw-alias-bg-layer-3);transition:background 160ms ease,border-color 160ms ease}
@@ -300,7 +301,7 @@ const CSS = `
 .aall-menu-item{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}
 .aall-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .aall-menu-empty{padding:10px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
-@media (max-width:640px){.aall-card-body{grid-template-columns:32px minmax(0,1fr)}.aall-card-body>.aall-switch{grid-column:1/-1}}
+@media (max-width:640px){.aall-card-head{grid-template-columns:32px minmax(0,1fr)}.aall-card-head>.aall-switch{grid-column:1/-1}}
 @media (prefers-reduced-motion:reduce){.aall-switch-track,.aall-switch-track::after{transition:none}}
 `
 
@@ -696,34 +697,38 @@ const RosterCard = React.memo(function RosterCard(props: CardProps): React.React
   const label = t(on ? 'toggle.disable' : 'toggle.enable')
   return React.createElement('div', { className: 'aall-card', 'data-enabled': on },
     React.createElement('div', { className: 'aall-card-body' },
-      React.createElement('div', { className: 'aall-emoji', 'aria-hidden': true }, expert.emoji),
-      React.createElement('div', { className: 'aall-identity' },
-        React.createElement('div', { className: 'aall-name' },
-          React.createElement('span', null, expert.name),
-          expert.nameEn === expert.name ? null : React.createElement('span', { className: 'aall-name-en' }, expert.nameEn)),
-        React.createElement('div', { className: 'aall-meta' },
-          React.createElement('span', { className: 'aall-division' }, groupLabel(expert.division, props.locale)),
-          React.createElement('div', { className: 'aall-badges' },
-            expert.custom ? React.createElement('span', { className: 'aall-badge' }, t('badge.custom')) : null,
-            React.createElement('span', { className: 'aall-badge' }, t(expert.translated ? 'badge.translated' : 'badge.notTranslated')),
-            expert.conflict ? React.createElement('span', { className: 'aall-badge' }, t('badge.conflict')) : null)),
-        React.createElement('p', { className: 'aall-intro' },
-          React.createElement('strong', null, `${t('card.introHeading')}: `),
-          expert.intro.trim() === '' ? t('card.introMissing') : expert.intro),
-        React.createElement('p', { className: 'aall-description' }, expert.description)),
-      // The switch carries no text label: the track and the card border already
-      // say on or off, and the freed column lets the introduction reach further
-      // right, which is what shortens every card.
-      React.createElement('label', { className: 'aall-switch', title: label },
-        React.createElement('input', {
-          type: 'checkbox',
-          className: 'aall-switch-input',
-          checked: on,
-          disabled: props.pending || expert.conflict,
-          'aria-label': `${label} ${expert.name}`,
-          onChange: () => { props.onToggle(expert) },
-        }),
-        React.createElement('span', { className: 'aall-switch-track' }))),
+      // The head is the only gridded row. Everything below it spans the card, so
+      // the introduction starts at the card's own left edge and ends at the same
+      // right edge the switch sits on.
+      React.createElement('div', { className: 'aall-card-head' },
+        React.createElement('div', { className: 'aall-emoji', 'aria-hidden': true }, expert.emoji),
+        React.createElement('div', { className: 'aall-identity' },
+          React.createElement('div', { className: 'aall-name' },
+            React.createElement('span', null, expert.name),
+            expert.nameEn === expert.name ? null : React.createElement('span', { className: 'aall-name-en' }, expert.nameEn)),
+          React.createElement('div', { className: 'aall-meta' },
+            React.createElement('span', { className: 'aall-division' }, groupLabel(expert.division, props.locale)),
+            React.createElement('div', { className: 'aall-badges' },
+              expert.custom ? React.createElement('span', { className: 'aall-badge' }, t('badge.custom')) : null,
+              React.createElement('span', { className: 'aall-badge' }, t(expert.translated ? 'badge.translated' : 'badge.notTranslated')),
+              expert.conflict ? React.createElement('span', { className: 'aall-badge' }, t('badge.conflict')) : null))),
+        // The switch carries no text label: the track and the card border already
+        // say on or off, and the freed column lets the introduction reach further
+        // right, which is what shortens every card.
+        React.createElement('label', { className: 'aall-switch', title: label },
+          React.createElement('input', {
+            type: 'checkbox',
+            className: 'aall-switch-input',
+            checked: on,
+            disabled: props.pending || expert.conflict,
+            'aria-label': `${label} ${expert.name}`,
+            onChange: () => { props.onToggle(expert) },
+          }),
+          React.createElement('span', { className: 'aall-switch-track' }))),
+      React.createElement('p', { className: 'aall-intro' },
+        React.createElement('strong', null, `${t('card.introHeading')}: `),
+        expert.intro.trim() === '' ? t('card.introMissing') : expert.intro),
+      React.createElement('p', { className: 'aall-description' }, expert.description)),
     React.createElement('div', { className: 'aall-card-foot' },
       React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onView(expert) } },
         React.createElement(EyeIcon, null), React.createElement('span', null, t('card.viewPrompt'))),

@@ -338,6 +338,24 @@ describe('roster page presentation', () => {
     expect(container.querySelector('.aall-group-count')?.textContent).toBe('15')
   })
 
+  it('gives the introduction the full card width, flush under the head row', async () => {
+    const remote = createRemote(roster())
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    // Not inside the indented identity column and not inside the head grid, so
+    // its left edge is the card's own padding and its right edge is the one the
+    // switch sits on.
+    expect(container.querySelector('.aall-identity .aall-intro')).toBeNull()
+    expect(container.querySelector('.aall-card-head .aall-intro')).toBeNull()
+    expect(container.querySelector('.aall-card-body > .aall-intro')).not.toBeNull()
+    expect(container.querySelector('.aall-card-body > .aall-description')).not.toBeNull()
+
+    // The switch lives in the head row, which is the only gridded row left.
+    expect(container.querySelector('.aall-card-head > .aall-switch')).not.toBeNull()
+    expect(container.querySelector('.aall-card-head > .aall-emoji')).not.toBeNull()
+  })
+
   it('keeps the card switch label-free so the introduction reaches further right', async () => {
     const remote = createRemote(roster())
     const { component, t } = await mount(remote)

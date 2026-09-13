@@ -119,6 +119,18 @@ check(
   glossaryDivisions.filter(([division, value]) => ZH_DIVISION[division] !== value).map(([division]) => division).join(', '),
 )
 
+// The avatar brief hands out one filename per expert, so it is only usable
+// while it names exactly the current roster. Regenerate with `pnpm avatars`.
+const { roster } = await import('./avatar-manifest.mjs')
+const avatarBrief = await readFile(new URL('../docs/AVATARS.md', import.meta.url), 'utf8')
+const slugs = roster().map((row) => row.slug)
+const briefSlugs = [...avatarBrief.matchAll(/^\| `([a-z0-9-]+)` \|/gm)].map((match) => match[1])
+check(
+  `docs/AVATARS.md 逐条对应名册（${slugs.length} 个专家）`,
+  briefSlugs.length === slugs.length && briefSlugs.every((slug, index) => slug === slugs[index]),
+  `清单 ${briefSlugs.length} 条，名册 ${slugs.length} 条；先跑 pnpm avatars`,
+)
+
 if (failures > 0) {
   console.error(`\n${failures} 项验证失败`)
   process.exit(1)

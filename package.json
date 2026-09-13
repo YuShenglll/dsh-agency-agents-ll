@@ -41,6 +41,7 @@
     "check": "node sync/checks.mjs",
     "sync:stamp": "node sync/stamp.mjs",
     "sync:calibrate": "node sync/calibrate-ratio.mjs",
+    "avatars": "node scripts/avatar-manifest.mjs",
     "prepublishOnly": "pnpm build && pnpm test && pnpm verify && pnpm check"
   },
   "dsh": {

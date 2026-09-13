@@ -63,6 +63,7 @@ pnpm sync             # 从上游同步英文资产并刷新 manifest
 pnpm sync:stamp       # 为中文档案盖 sourceSha256（从磁盘推导，不靠译者手填）
 pnpm check            # 12 项机械门禁
 pnpm sync:calibrate   # 用本项目自己的译文对重测长度比区间
+pnpm avatars          # 重新生成 docs/AVATARS.md（卡片头像规格 + 279 个 slug 清单）
 ```
 
 本地安装到 DSH profile：

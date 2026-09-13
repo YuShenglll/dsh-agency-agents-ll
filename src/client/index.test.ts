@@ -380,6 +380,21 @@ describe('roster page presentation', () => {
     expect(container.querySelector('.aall-actions')?.textContent).toContain('新建自定义专家')
   })
 
+  it('badges only the experts that actually carry a Chinese prompt', async () => {
+    const experts = await shippedRoster()
+    const remote = createRemote(experts)
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    // 273 of 279 ship an English persona and no Chinese one, so badging that
+    // default would put the same tag on almost every card. Only the exception
+    // is marked, and a Chinese introduction is not what the badge means.
+    const badged = [...container.querySelectorAll('.aall-badge')].filter((node) => node.textContent === '中文提示词')
+    expect(badged.length).toBe(6)
+    expect(experts.filter((expert) => expert.translated).length).toBe(6)
+    expect(container.textContent).not.toContain('仅英文人设')
+  })
+
   it('narrows the roster to enabled experts only', async () => {
     const experts = await shippedRoster()
     const remote = createRemote(experts)

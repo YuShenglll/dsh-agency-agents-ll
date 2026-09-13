@@ -710,7 +710,11 @@ const RosterCard = React.memo(function RosterCard(props: CardProps): React.React
             React.createElement('span', { className: 'aall-division' }, groupLabel(expert.division, props.locale)),
             React.createElement('div', { className: 'aall-badges' },
               expert.custom ? React.createElement('span', { className: 'aall-badge' }, t('badge.custom')) : null,
-              React.createElement('span', { className: 'aall-badge' }, t(expert.translated ? 'badge.translated' : 'badge.notTranslated')),
+              // Only the exception is badged. 273 of 279 experts carry an English
+              // persona and no Chinese one, so a badge on all of them would say
+              // the same thing everywhere; the prompt dialog reports the served
+              // language at the point where it matters.
+              expert.translated ? React.createElement('span', { className: 'aall-badge' }, t('badge.translated')) : null,
               expert.conflict ? React.createElement('span', { className: 'aall-badge' }, t('badge.conflict')) : null))),
         // The switch carries no text label: the track and the card border already
         // say on or off, and the freed column lets the introduction reach further

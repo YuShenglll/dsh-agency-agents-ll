@@ -230,17 +230,27 @@ export function buildLexicon(experts: readonly ExpertSummary[], enabled: Readonl
 // ---------------------------------------------------------------------------
 
 const CSS = `
-.aall-section{box-sizing:border-box;display:flex;flex-direction:column;gap:16px;width:100%;max-width:880px;margin:0 auto;padding:0 0 32px;color:var(--dsw-alias-label-primary)}
-/* Nothing in this row is anchored to the right edge. The settings panel gains
-   and loses its scrollbar as the roster fills and empties, which changes the
-   content width by the bar's 8px, and anything pinned right - or growing -
-   moves with it. Laying the row out from the left instead makes it independent
-   of the container width, so no host detail has to hold for it to stay put. */
+/* Two independent guards keep the content width still when the roster empties,
+   because the panel's scrollbar is a real 8px gutter: with the bar the content
+   box is 8px narrower than without it, so every card rewraps. Neither guard may
+   be the only one.
+
+   1. The section is always 1px taller than the panel's content box, so the bar
+      is painted whether the roster holds 279 cards or none. This asks nothing
+      of the host beyond a definite height on the scroll container, and an
+      unresolvable percentage just drops the declaration.
+   2. The scroll container reserves its gutter outright. The slot renderer
+      mounts the section straight into it - renderEntry returns <Comp/> with no
+      wrapper - so :has() reaches it, and scrollbar-gutter is inert elsewhere. */
+:has(> .aall-section){scrollbar-gutter:stable}
+.aall-section{box-sizing:border-box;display:flex;flex-direction:column;gap:16px;width:100%;max-width:880px;min-height:calc(100% + 1px);margin:0;padding:0 0 32px;color:var(--dsw-alias-label-primary)}
+/* With the width pinned by the guards above, the actions can sit on the cards'
+   right edge without ever moving. */
 .aall-head{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px}
-.aall-head-text{flex:0 1 auto;min-width:0}
+.aall-head-text{flex:1 1 260px;min-width:0}
 .aall-title{margin:0;font-size:20px;line-height:32px;font-weight:650}
 .aall-summary{margin:8px 0 0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
-.aall-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.aall-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-left:auto}
 .aall-btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 12px;border:1px solid transparent;border-radius:8px;background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);font:inherit;font-size:13px;font-weight:550;cursor:pointer}
 .aall-btn:hover:not(:disabled){opacity:.9}
 .aall-btn:disabled{opacity:.5;cursor:default}

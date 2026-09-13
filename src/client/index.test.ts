@@ -336,21 +336,30 @@ describe('roster page presentation', () => {
     expect(DICTIONARIES.zh['nav']).toBe('专家库')
   })
 
-  it('lays the header out from the left so the scrollbar cannot move it', async () => {
+  it('keeps the scrollbar painted so the content width cannot change', async () => {
+    const remote = createRemote(roster())
+    await mount(remote)
+
+    const sheet = [...document.head.querySelectorAll('style')].map((tag) => tag.textContent).join('\n')
+    const section = /\.aall-section\{([^}]*)\}/.exec(sheet)?.[1] ?? ''
+    expect(section, 'the section rule must exist').not.toBe('')
+    // The panel's bar is a real 8px gutter, so losing it widens the content box
+    // and rewraps every card. Both guards are asserted because either one alone
+    // can miss: the first needs a definite height on the container, the second
+    // needs :has() to reach it.
+    expect(section, 'the section must always overflow by a hair').toContain('min-height:calc(100% + 1px)')
+    expect(sheet, 'and the container must reserve its gutter').toContain(':has(> .aall-section){scrollbar-gutter:stable}')
+  })
+
+  it('puts the header actions on the same right edge as the cards', async () => {
     const remote = createRemote(roster())
     await mount(remote)
 
     const sheet = [...document.head.querySelectorAll('style')].map((tag) => tag.textContent).join('\n')
     const actions = /\.aall-actions\{([^}]*)\}/.exec(sheet)?.[1] ?? ''
     const text = /\.aall-head-text\{([^}]*)\}/.exec(sheet)?.[1] ?? ''
-    expect(actions, 'the actions rule must exist').not.toBe('')
-    // A right anchor or a growing sibling both track the container width, and
-    // the panel's width moves by the scrollbar's 8px as the roster empties.
-    expect(actions, 'margin-left:auto pins the actions to the right edge').not.toContain('margin-left:auto')
-    expect(text, 'a growing text block pushes the actions right').toContain('flex:0 1 auto')
-    // The host-coupled rule that reached past this sheet is gone, so every
-    // selector is ours again.
-    expect(sheet, 'no rule may reach outside the plugin').not.toContain(':has(')
+    expect(actions, 'the actions must reach the right edge').toContain('margin-left:auto')
+    expect(text, 'a growing text block is what pushes them there').toContain('flex:1 1 260px')
   })
 
   it('no longer lets a filter field grow with the scrollbar', async () => {

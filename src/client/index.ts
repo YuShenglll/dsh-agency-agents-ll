@@ -230,6 +230,16 @@ export function buildLexicon(experts: readonly ExpertSummary[], enabled: Readonl
 // ---------------------------------------------------------------------------
 
 const CSS = `
+/* The settings shell scrolls inside its own options area, and that bar is a
+   real 8px gutter (--dsh-scrollbar-width), not an overlay one. Emptying the
+   roster removes the bar, the content box grows 8px, and everything anchored
+   to its right edge - the header actions - slides sideways. Reserving the
+   gutter keeps the content box one width whether or not the bar is painted.
+   The options area is this section's direct parent (the slot renderer's error
+   boundary is a class component and adds no element), so :has() reaches it.
+   scrollbar-gutter is ignored on anything that does not scroll, so a miss here
+   costs nothing. */
+:has(> .aall-section){scrollbar-gutter:stable}
 .aall-section{box-sizing:border-box;display:flex;flex-direction:column;gap:16px;width:100%;max-width:880px;margin:0 auto;padding:0 0 32px;color:var(--dsw-alias-label-primary)}
 .aall-head{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px}
 .aall-head-text{flex:1 1 260px;min-width:0}
@@ -241,6 +251,8 @@ const CSS = `
 .aall-btn:disabled{opacity:.5;cursor:default}
 .aall-btn-secondary{background:transparent;border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary)}
 .aall-btn-secondary:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);opacity:1}
+.aall-btn-danger{margin-right:auto;background:transparent;border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-state-error-primary)}
+.aall-btn-danger:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);opacity:1}
 .aall-btn:focus-visible,.aall-control:focus-visible,.aall-switch-input:focus-visible+.aall-switch-track,.aall-segment:focus-visible{outline:2px solid var(--dsw-alias-state-success-primary);outline-offset:2px}
 /* No field here may grow. The settings panel scrolls, and its bar is a real
    8px gutter (--dsh-scrollbar-width), so emptying the roster widens the
@@ -573,6 +585,8 @@ interface EditorProps {
   readonly onToggleEnabled: (next: boolean) => void
   readonly onCancel: () => void
   readonly onSave: () => void
+  /** Present only while editing an expert that already exists. */
+  readonly onDelete?: () => void
 }
 
 function CustomEditor(props: EditorProps): React.ReactElement {
@@ -632,6 +646,16 @@ function CustomEditor(props: EditorProps): React.ReactElement {
           }),
           t('custom.enabled'))),
       React.createElement('div', { className: 'aall-dialog-foot' },
+        // Editing an existing expert is where someone looks to get rid of it;
+        // the card's own delete link is only visible once such a card exists.
+        draft.slug === undefined || props.onDelete === undefined
+          ? null
+          : React.createElement('button', {
+            type: 'button',
+            className: 'aall-btn aall-btn-danger',
+            disabled: props.busy,
+            onClick: props.onDelete,
+          }, t('custom.delete')),
         React.createElement('button', { type: 'button', className: 'aall-btn aall-btn-secondary', disabled: props.busy, onClick: props.onCancel }, t('custom.cancel')),
         React.createElement('button', { type: 'button', className: 'aall-btn', disabled: props.busy, onClick: props.onSave }, props.busy ? t('custom.saving') : t('custom.save')))))
 }
@@ -696,7 +720,7 @@ interface CardProps {
   readonly onView: (expert: ExpertSummary) => void
   readonly onCopy: (expert: ExpertSummary) => void
   readonly onEdit: (expert: ExpertSummary) => void
-  readonly onDelete: (expert: ExpertSummary) => void
+  readonly onDelete: (slug: string, name: string) => void
 }
 
 const RosterCard = React.memo(function RosterCard(props: CardProps): React.ReactElement {
@@ -751,7 +775,7 @@ const RosterCard = React.memo(function RosterCard(props: CardProps): React.React
         ? React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onEdit(expert) } }, t('custom.edit'))
         : null,
       expert.custom
-        ? React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onDelete(expert) } }, t('custom.delete'))
+        ? React.createElement('button', { type: 'button', className: 'aall-link', disabled: props.pending, onClick: () => { props.onDelete(expert.slug, expert.name) } }, t('custom.delete'))
         : null))
 })
 
@@ -773,7 +797,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
   const [copied, setCopied] = React.useState<string | null>(null)
   const [editor, setEditor] = React.useState<EditorState | null>(null)
   const [editorError, setEditorError] = React.useState<string | null>(null)
-  const [pendingDelete, setPendingDelete] = React.useState<ExpertSummary | null>(null)
+  const [pendingDelete, setPendingDelete] = React.useState<{ readonly slug: string; readonly name: string } | null>(null)
   const saving = React.useRef(false)
 
   /** Fill in the `{detail}` placeholder of a failure message. */
@@ -932,11 +956,16 @@ function RosterSection(props: SectionProps): React.ReactElement {
     })
   }
 
-  const removeExpert = (expert: ExpertSummary): void => {
-    if (snapshot === undefined) return
+  /** Open the confirmation for one expert, from its card or from its editor. */
+  const requestDelete = React.useCallback((slug: string, name: string): void => {
+    setEditor(null)
+    setPendingDelete({ slug, name })
+  }, [])
+
+  const removeExpert = (slug: string): void => {
     void runWrite(async () => {
       const current = catalogState(props.remote)
-      const result = await props.remote.deleteCustomExpert(expert.slug, current.revision)
+      const result = await props.remote.deleteCustomExpert(slug, current.revision)
       if (!result.ok) throw new Error(result.error.message)
       acceptCatalog(props.remote, result.value)
       setPendingDelete(null)
@@ -979,7 +1008,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
     onView: viewPrompt,
     onCopy: copyPrompt,
     onEdit: openEditor,
-    onDelete: setPendingDelete,
+    onDelete: requestDelete,
   })
 
   return React.createElement('div', { className: 'aall-section' },
@@ -1056,6 +1085,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
       onToggleEnabled: (next) => { setEditor({ ...editor, enabled: next }) },
       onCancel: () => { setEditor(null) },
       onSave: saveEditor,
+      onDelete: () => { requestDelete(editor.draft.slug ?? '', editor.draft.name) },
     }),
     pendingDelete === null ? null : React.createElement('div', { className: 'aall-modal', role: 'presentation' },
       React.createElement('div', { className: 'aall-dialog aall-dialog-narrow', role: 'dialog', 'aria-modal': true },
@@ -1065,7 +1095,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
           t('custom.deleteConfirm').replace('{name}', pendingDelete.name)),
         React.createElement('div', { className: 'aall-dialog-foot' },
           React.createElement('button', { type: 'button', className: 'aall-btn aall-btn-secondary', disabled: busy, onClick: () => { setPendingDelete(null) } }, t('custom.cancel')),
-          React.createElement('button', { type: 'button', className: 'aall-btn', disabled: busy, onClick: () => { removeExpert(pendingDelete) } }, t('custom.delete'))))))
+          React.createElement('button', { type: 'button', className: 'aall-btn', disabled: busy, onClick: () => { removeExpert(pendingDelete.slug) } }, t('custom.delete'))))))
 }
 
 // ---------------------------------------------------------------------------

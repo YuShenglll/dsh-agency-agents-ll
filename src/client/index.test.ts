@@ -336,6 +336,27 @@ describe('roster page presentation', () => {
     expect(DICTIONARIES.zh['nav']).toBe('专家库')
   })
 
+  it('reserves the scroll gutter on whatever scrolls it', async () => {
+    const remote = createRemote(roster())
+    await mount(remote)
+
+    // The only rule in the sheet that is not .aall- scoped: the options area
+    // that scrolls this section gains and loses an 8px bar as the roster
+    // empties, and every right-anchored element would move with it.
+    const sheet = [...document.head.querySelectorAll('style')].map((tag) => tag.textContent).join('\n')
+    expect(sheet).toContain(':has(> .aall-section){scrollbar-gutter:stable}')
+  })
+
+  it('no longer lets a filter field grow with the scrollbar', async () => {
+    const remote = createRemote(roster())
+    await mount(remote)
+
+    const sheet = [...document.head.querySelectorAll('style')].map((tag) => tag.textContent).join('\n')
+    const field = /\.aall-field\{([^}]*)\}/.exec(sheet)?.[1] ?? ''
+    expect(field, 'the field rule must exist').not.toBe('')
+    expect(field, 'a growing field absorbs the scrollbar delta').toContain('flex:0 1')
+  })
+
   it('gives every division heading a sticky band with its count', async () => {
     const remote = createRemote(roster())
     const { component, t } = await mount(remote)
@@ -417,6 +438,44 @@ describe('roster page presentation', () => {
 
     expect(container.querySelectorAll('.aall-card').length, 'only the enabled expert remains').toBe(1)
     expect(container.querySelector('.aall-name')?.textContent).toContain('历史学家')
+  })
+
+  it('offers deletion from the editor of an existing custom expert', async () => {
+    const experts = await shippedRoster()
+    const custom: ExpertSummary = {
+      slug: 'custom-mine',
+      division: 'engineering',
+      emoji: '🧪',
+      name: '我的专家',
+      nameEn: '我的专家',
+      description: '一句话说明。',
+      descriptionEn: '一句话说明。',
+      intro: '这是我自己写的专家简介，用来验证编辑弹窗里的删除入口。',
+      translated: true,
+      custom: true,
+      conflict: false,
+    }
+    const remote = createRemote([...experts, custom])
+    remote.getCustomExpert = async () => ({
+      ok: true as const,
+      value: { slug: 'custom-mine', name: '我的专家', description: '一句话说明。', division: 'engineering', emoji: '🧪', intro: custom.intro, prompt: 'PERSONA' },
+    })
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    const card = [...container.querySelectorAll('.aall-card')].find((node) => node.textContent?.includes('我的专家'))
+    const edit = [...(card?.querySelectorAll('.aall-link') ?? [])].find((node) => node.textContent === '编辑')
+    expect(edit, 'a custom expert is editable').toBeDefined()
+    await act(async () => { (edit as HTMLButtonElement).click(); await Promise.resolve(); await Promise.resolve() })
+
+    const dialog = container.querySelector('.aall-dialog')
+    const remove = [...(dialog?.querySelectorAll('button') ?? [])].find((node) => node.textContent === '删除')
+    expect(remove, 'the editor of an existing expert must offer deletion').toBeDefined()
+
+    await act(async () => { (remove as HTMLButtonElement).click(); await Promise.resolve() })
+    const confirm = DICTIONARIES.zh['custom.deleteConfirm'].replace('{name}', '我的专家')
+    expect(container.textContent, 'deleting asks first').toContain(confirm)
+    expect(container.querySelector('.aall-dialog'), 'the editor closes behind the confirmation').not.toBeNull()
   })
 })
 

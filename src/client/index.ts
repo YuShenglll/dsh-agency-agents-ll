@@ -482,12 +482,32 @@ interface ComposerProps extends PropsLocale<'agencyLL'> {
 function ComposerButton(props: ComposerProps): React.ReactElement {
   const [open, setOpen] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const wrap = React.useRef<HTMLDivElement | null>(null)
   const state = React.useSyncExternalStore(
     (listener) => subscribeCatalog(props.remote, listener),
     () => catalogState(props.remote),
   )
   const enabled = state.snapshot === undefined ? [] : state.snapshot.experts.filter((expert) => state.enabled.has(expert.slug))
   const groups = groupByDivision(enabled, props.locale())
+
+  // Dismiss on an outside press and on Escape. The trigger toggles too, but a
+  // menu that only its own button can close covers the composer underneath it,
+  // which is where the pointer naturally goes next.
+  React.useEffect(() => {
+    if (!open) return
+    const dismiss = (event: MouseEvent): void => {
+      if (wrap.current?.contains(event.target as Node) !== true) setOpen(false)
+    }
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', dismiss)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('mousedown', dismiss)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [open])
 
   const pick = (expert: ExpertSummary): void => {
     if (props.insertReference?.(buildReference(expert, props.locale())) !== true) {
@@ -498,7 +518,7 @@ function ComposerButton(props: ComposerProps): React.ReactElement {
     setOpen(false)
   }
 
-  return React.createElement('div', { className: 'aall-btn-wrap' },
+  return React.createElement('div', { className: 'aall-btn-wrap', ref: wrap },
     React.createElement('button', {
       type: 'button',
       className: 'aall-btn aall-btn-secondary',

@@ -147,6 +147,7 @@ function createRemote(experts: ExpertSummary[]): FakeRemote {
 /** Mount the plugin against a fake client context and hand back the page. */
 async function mount(remote: FakeRemote): Promise<{
   component: React.ComponentType<Record<string, unknown>>
+  composer: React.ComponentType<Record<string, unknown>>
   t: (key: string) => string
   options: Record<string, unknown>
   sources: Array<Record<string, unknown>>
@@ -168,7 +169,7 @@ async function mount(remote: FakeRemote): Promise<{
     },
     slots: {
       inject: (name: string, callback: () => unknown) => {
-        if (name === 'settings.section') callback()
+        if (name === 'settings.section' || name === 'conversation.input.left') callback()
       },
       register: (options: Record<string, unknown>, component: React.ComponentType<Record<string, unknown>>) => {
         registered.push({ options, component })
@@ -189,7 +190,9 @@ async function mount(remote: FakeRemote): Promise<{
 
   const entry = registered.find((item) => item.options.name === 'settings.section')
   if (entry === undefined) throw new Error('the settings section was never registered')
-  return { component: entry.component, t, options: entry.options, sources }
+  const composer = registered.find((item) => item.options.name === 'conversation.input.left')
+  if (composer === undefined) throw new Error('the composer button was never registered')
+  return { component: entry.component, composer: composer.component, t, options: entry.options, sources }
 }
 
 describe('roster settings page', () => {
@@ -291,6 +294,69 @@ describe('roster settings page against the shipped roster', () => {
 
     const stuck = [...container.querySelectorAll<HTMLInputElement>('.aall-switch-input')].filter((input) => input.disabled)
     expect(stuck.length, 'no toggle may be left disabled after the write settles').toBe(0)
+  })
+})
+
+describe('composer summon menu', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => { root.unmount() })
+    container.remove()
+  })
+
+  /** Open the menu and hand back the trigger. */
+  const openMenu = async (): Promise<void> => {
+    const experts = await shippedRoster()
+    const remote = createRemote(experts)
+    remote.enabled = experts.slice(0, 3).map((expert) => expert.slug)
+    remote.catalog = { ...remote.catalog, enabled: remote.enabled }
+    const { composer, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(composer, { t, insertReference: () => true })) })
+    const trigger = container.querySelector<HTMLButtonElement>('.aall-btn')
+    expect(trigger, 'the summon button must render').not.toBeNull()
+    await act(async () => { trigger!.click(); await Promise.resolve() })
+    expect(container.querySelector('.aall-menu'), 'the menu opens on click').not.toBeNull()
+  }
+
+  it('closes when the pointer presses anywhere else', async () => {
+    await openMenu()
+
+    // The menu covers the composer, and the pointer naturally goes there next.
+    // A menu only its own trigger can close is the defect this pins.
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.aall-menu'), 'an outside press dismisses it').toBeNull()
+  })
+
+  it('closes on Escape', async () => {
+    await openMenu()
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.aall-menu'), 'Escape dismisses it').toBeNull()
+  })
+
+  it('stays open when the press is inside it', async () => {
+    await openMenu()
+    const item = container.querySelector('.aall-menu-item')
+    expect(item).not.toBeNull()
+    await act(async () => {
+      item!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.aall-menu'), 'a press inside must not dismiss').not.toBeNull()
   })
 })
 

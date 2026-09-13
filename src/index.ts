@@ -28,9 +28,18 @@ import z from '@deepseek-ai/schemastery'
 import { fileURLToPath } from 'node:url'
 import { coercePromptLocale, DEFAULT_PROMPT_LOCALE, PROMPT_LOCALES, resolvePromptLocale, SETTINGS_NS, type PromptLocale } from './contract.js'
 import { loadCatalog, resolveExpert, type AssetRoots, type Expert } from './catalog.js'
+import { validateRosterSettings } from './expert-contract.js'
 import { formatHost, resolveHostLocale, type LocaleId } from './i18n.js'
 import { DIVISIONS, EN_DIVISION, ZH_DIVISION } from './names.js'
 import { loadPersona, sanitizePersona } from './persona.js'
+import {
+  AGENCY_LIBRARY_SERVICE,
+  AGENCY_PERSONA_SERVICE,
+  createRosterLibrary,
+  type AgencyPersonaSource,
+  type RosterLibrary,
+  type RosterSettingsState,
+} from './roster-settings.js'
 
 /** Cordis plugin name; must match the row `name` in `cordis.patch.yml`. */
 export const name = 'agency-agents-ll'
@@ -60,13 +69,38 @@ export interface Config {
   readonly root: string
   /** Subagent provider used to run an expert. */
   readonly provider: string
+  /** Slugs the roster offers to the model; written by the browser settings page. */
+  readonly enabled: string[]
+  /** Experts the user authored; written by the browser custom-expert editor. */
+  readonly customExperts: unknown[]
 }
 
 export const Config: z<Config> = z.object({
   promptLocale: z.union([...PROMPT_LOCALES]).default(DEFAULT_PROMPT_LOCALE),
   root: z.string().default(''),
   provider: z.string().default('spawn'),
+  enabled: z.array(z.string()).default([]),
+  // schemastery has no `unknown()` and does not need one here: the array is
+  // only a container, and every element is parsed by `customExpertSchema` on
+  // read so one malformed entry cannot fail the whole namespace registration.
+  customExperts: z.array(z.any()).default([]),
 })
+
+/**
+ * Read the DSH interface language. A plugin can be loaded before the locale
+ * namespace registers, so an unavailable section reads as Chinese — the same
+ * default the Host copy uses everywhere else.
+ * @param ctx - context carrying the settings service.
+ * @returns the interface language.
+ */
+function readLocalePreference(ctx: Context): LocaleId {
+  try {
+    const section = ctx.settings?.get?.(LOCALE_NS) as { preference?: unknown } | undefined
+    return resolveHostLocale(section?.preference)
+  } catch {
+    return 'zh'
+  }
+}
 
 const BUNDLED_EN = fileURLToPath(new URL('../assets/en/', import.meta.url))
 const BUNDLED_ZH = fileURLToPath(new URL('../assets/zh/', import.meta.url))
@@ -184,24 +218,23 @@ export function validateSummonSpecs(specs: unknown, locale: LocaleId): SummonSpe
 export function apply(ctx: Context, config: Config): void {
   const roots = resolveAssetRoots(config.root)
   let source: () => Config = () => config
+  /** Roster state as stored; replaced with the live scope through installSection. */
+  let roster: RosterSettingsState = { enabled: [], customExperts: [] }
 
   ctx.inject(['settings'], (settingsCtx) => {
     settingsCtx.settings.installSection(ctx, SETTINGS_NS, Config, config, {
       setSource: (current: () => Config) => {
         source = current
+        roster = { enabled: source().enabled, customExperts: source().customExperts }
       },
-      onChange: () => {},
+      onChange: () => {
+        roster = { enabled: source().enabled, customExperts: source().customExperts }
+      },
+      validate: (value: Config) => { validateRosterSettings(value, hostLocale()) },
     })
   })
 
-  const hostLocale = (): LocaleId => {
-    try {
-      const section = ctx.settings?.get?.(LOCALE_NS) as { preference?: unknown } | undefined
-      return resolveHostLocale(section?.preference)
-    } catch {
-      return 'zh'
-    }
-  }
+  const hostLocale = (): LocaleId => readLocalePreference(ctx)
 
   /** Language the roster text renders in: always the interface language. */
   const rosterLocale = (): LocaleId => hostLocale()
@@ -211,6 +244,42 @@ export function apply(ctx: Context, config: Config): void {
 
   let catalog: Promise<Map<string, Expert>> | undefined
   const experts = (): Promise<Map<string, Expert>> => (catalog ??= loadCatalog(roots, DIVISIONS).then((result) => result.experts))
+
+  const library: RosterLibrary = createRosterLibrary(
+    async () => [...(await experts()).values()],
+    {
+      read: () => roster,
+      revision: () => {
+        const descriptor = ctx.settings.describe().find((candidate) => candidate.ns === SETTINGS_NS)
+        if (descriptor === undefined) throw new Error(formatHost(rosterLocale(), 'error.rosterUnavailable'))
+        return descriptor.revision
+      },
+      mutate: (ops, expectedRevision) => ctx.settings.mutate(SETTINGS_NS, ops, expectedRevision),
+    },
+    () => coercePromptLocale(source().promptLocale),
+    () => rosterLocale(),
+  )
+
+  // The Remote half is a separate top-level row (see cordis.patch.yml), so the
+  // roster it serves has to be reachable from there: both faces are provided on
+  // the root context rather than closed over.
+  ctx.provide(AGENCY_LIBRARY_SERVICE, library)
+
+  const personaSource: AgencyPersonaSource = {
+    async getPrompt(slug, division, locale) {
+      // A user-authored expert lives in the settings document, not in either
+      // asset tree, so it is resolved first; the shipped trees only serve the
+      // slugs they own.
+      const custom = library.getCustom(slug)
+      if (custom !== undefined) {
+        if (custom.division !== division) throw new Error(formatHost(locale, 'error.expertMissing', { query: slug }))
+        return { prompt: custom.prompt, locale: 'zh', fallback: false }
+      }
+      if (slug.startsWith('custom-')) throw new Error(formatHost(locale, 'error.expertMissing', { query: slug }))
+      return loadPersona(roots, division, slug, locale)
+    },
+  }
+  ctx.provide(AGENCY_PERSONA_SERVICE, personaSource)
 
   /** Chinese name when translated, English name otherwise. */
   const displayName = (expert: Expert): string => (expert.nameZh !== '' ? expert.nameZh : expert.nameEn)

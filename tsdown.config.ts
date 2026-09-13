@@ -1,8 +1,39 @@
 import type { UserConfig } from 'tsdown'
+import ts from 'typescript'
+
+const decoratorSyntax = /^\s*@[A-Za-z_$][\w$]*/m
+
+/**
+ * Lower standard (stage-3) decorators before esbuild parses the file.
+ *
+ * `@Remote('getCatalog')` on the Host service is stage-3 syntax; esbuild in
+ * tsdown's default pipeline does not understand it, so `tsc.transpileModule`
+ * rewrites it into `__esDecorate` calls first. The vitest side carries the same
+ * plugin in `vitest.config.ts`, otherwise the tests would exercise a different
+ * compilation than the published artifact.
+ * @returns the pre-enforced Vite plugin.
+ */
+function standardDecoratorPlugin() {
+  return {
+    name: 'standard-decorators',
+    enforce: 'pre' as const,
+    transform(code: string, id: string) {
+      const file = id.split('?', 1)[0]!
+      if (!/\.[cm]?tsx?$/.test(file) || !decoratorSyntax.test(code)) return
+      const result = ts.transpileModule(code, {
+        fileName: file,
+        compilerOptions: { target: ts.ScriptTarget.ES2024, module: ts.ModuleKind.ESNext, sourceMap: true },
+      })
+      return { code: result.outputText.replace(/\n?\/\/# sourceMappingURL=.*$/u, '\n'), map: result.sourceMapText }
+    },
+  }
+}
 
 /**
  * Two build faces:
- * - `node`   — the Host half, plain ESM for Node.
+ * - `node`   — the Host half, plain ESM for Node. `remote` is a separate entry
+ *   because the profile loads it as its own top-level row so the gateway can
+ *   find the Remote routes.
  * - `client` — the browser half. The client module system loads a package's
  *   `./client` export as a lazy-CJS factory, so the bundle must carry the
  *   `window.__ModuleLoader__.load({ id, factory })` banner. Platform-frozen
@@ -28,10 +59,11 @@ const ID = 'dsh-agency-agents-ll'
 
 const node: UserConfig = {
   name: ID,
-  entry: { index: 'src/index.ts', contract: 'src/contract.ts', names: 'src/names.ts' },
+  entry: { index: 'src/index.ts', contract: 'src/contract.ts', names: 'src/names.ts', remote: 'src/remote.ts' },
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',
+  plugins: [standardDecoratorPlugin()],
   dts: true,
   fixedExtension: false,
   clean: true,

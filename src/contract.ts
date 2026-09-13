@@ -38,3 +38,22 @@ export function resolvePromptLocale(preference: PromptLocale, host: ResolvedLoca
 export function coercePromptLocale(value: unknown): PromptLocale {
   return PROMPT_LOCALES.includes(value as PromptLocale) ? (value as PromptLocale) : DEFAULT_PROMPT_LOCALE
 }
+
+/**
+ * Whether a settings provider refused a write because the section had moved
+ * since the caller read it.
+ *
+ * The code is the stable signal (`SettingsConflictError.code`); the message test
+ * covers the relay boundary, where a business failure can arrive as a plain
+ * error carrying only the original text. This is the one place that knows how a
+ * conflict is spelled, so the Host never rewrites the refusal into a generic
+ * failure and the browser can still tell a lost race from a real fault.
+ *
+ * @param error - a caught value.
+ * @returns whether the write was refused as stale.
+ */
+export function isSettingsConflict(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  if ((error as { code?: unknown }).code === 'SETTINGS_CONFLICT') return true
+  return error instanceof Error && error.message.includes('changed since it was read')
+}

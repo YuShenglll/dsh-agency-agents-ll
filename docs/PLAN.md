@@ -155,6 +155,10 @@ dsh-agency-agents-ll/
 - 客户端产物必须是 `window.__ModuleLoader__.load({ id, factory })` 包装的 CJS，平台冻结模块保持 external（`react` / `react-dom` / `@deepseek-ai/cordis` / `ui-slots` / `ui-primitives` / `client-web-react` / `schema-input` / `ui-attachment`）。
 - 设置页由插件自己的客户端注册到 `settings.section`（独立导航页）或 `settings.plugin.item`（插件配置卡片）。
 - 本地安装：`dsh plugin --profile desktop add ./dsh-agency-agents-ll`。
+- **`dsh.client.inject` 是「必须先挂载的客户端模块」清单，不是类型清单。** 列进一个宿主没有的模块，会让浏览器半边**永不激活**。所以：
+  - 列进去的每一项都必须是 `peerDependencies` 里的运行时依赖（`pnpm verify` 强制）。
+  - 只为声明合并而引入的包（`import type {} from '...'`，编译后被擦除）放 `devDependencies`，**不列入 inject**。
+  - 槽位依赖靠 `ctx.slots.inject('<slot>', ...)` 表达 —— 它等的是槽位声明，不是模块名。`conversation.input.left` 就属于这一类。
 
 ## 9. 阶段与验收
 

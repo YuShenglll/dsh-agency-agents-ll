@@ -1,6 +1,12 @@
 # Read and merged into the target profile by `dsh plugin add`.
 # Expert assets ship inside the package; override config.root only when you want
 # to point the roster at an external checkout.
+#
+# The Remote half is its own top-level row: the gateway discovers Remote routes
+# from the root service table, so a service provided inside another plugin's
+# fiber would not be routable from the browser.
 - insert:
+    - id: agency-agents-ll-remote
+      name: dsh-agency-agents-ll/remote
     - id: agency-agents-ll
       name: dsh-agency-agents-ll

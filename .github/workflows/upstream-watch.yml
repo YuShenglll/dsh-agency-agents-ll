@@ -30,10 +30,12 @@ jobs:
   watch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
+          # 22 是 package.json engines 的下限：在最老的受支持版本上跑通，
+          # 才说明这个脚本没有偷偷依赖新版本才有的东西。
           node-version: '22'
 
       - name: 检查上游名册

@@ -40,6 +40,8 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 英文一变，对应中文即按源文件哈希标记为过期：**带正文的过期是发布门禁的硬失败**（旧中文人设配新英文指令会误导被召唤的专家），**只有简介的过期只是告警**。见 [`docs/PLAN.md`](docs/PLAN.md) 第 3 节。
 
+上游新增专家时怎么跟上：**`pnpm sync:upstream`** 一条命令拉取、同步、列出还需要人工补写什么，再跑门禁。完整流程与已知限制见 [`docs/UPDATE.md`](docs/UPDATE.md)。
+
 ## 机械质量门禁
 
 `pnpm check` 会跑 12 项检查，产出 `sync/report.json`，并把名册分成三堆：
@@ -67,7 +69,9 @@ pnpm dev              # 开发用：watch 重建，DSH 会自动热重载（见�
 pnpm build            # typecheck + tsdown：Host 半边 ESM，客户端半边 ModuleLoader CJS
 pnpm exec vitest run  # 单元测试（Host）+ 浏览器端组件测试（jsdom）
 pnpm verify           # 发布门禁（包结构、导出、双语 key 一致、分区名单一真源）
-pnpm sync             # 从上游同步英文资产并刷新 manifest
+pnpm sync             # 从上游同步英文资产并刷新 manifest（离线，不联网）
+pnpm sync:upstream    # 上游更新一条龙：fetch+快进 -> 同步 -> 待办清单 -> 12 项门禁
+pnpm authoring        # 只看待办：上游变动后还需要人工补写哪些中文档案/头像
 pnpm sync:stamp       # 为中文档案盖 sourceSha256（从磁盘推导，不靠译者手填）
 pnpm check            # 12 项机械门禁
 pnpm sync:calibrate   # 用本项目自己的译文对重测长度比区间

@@ -40,6 +40,8 @@
     "test": "pnpm avatars:inline && vitest run",
     "verify": "pnpm avatars:inline && node scripts/verify.mjs",
     "sync": "node sync/sync.mjs",
+    "sync:upstream": "node sync/upstream.mjs",
+    "authoring": "node sync/authoring.mjs",
     "check": "node sync/checks.mjs",
     "sync:stamp": "node sync/stamp.mjs",
     "sync:calibrate": "node sync/calibrate-ratio.mjs",

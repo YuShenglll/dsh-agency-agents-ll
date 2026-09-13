@@ -1,0 +1,17 @@
+# The two asset trees are *content*, not source: git must never rewrite their
+# line endings.
+#
+# `assets/en/**` has a byte-identity contract with the upstream checkout, and two
+# gates hash it (`english-byte-identity`, and `translation-freshness` through
+# `sourceSha256`). Git for Windows ships `core.autocrlf=true` in the system
+# gitconfig, which converts LF to CRLF on checkout. `git status` does not show
+# it, because git normalises CRLF back to LF when comparing — so the tree looks
+# clean while `pnpm check` fails. Measured on a fresh clone before this file
+# existed: 279 of 279 English assets came out CRLF and 264 no longer matched
+# upstream.
+#
+# `-text` keeps the working tree byte-for-byte equal to what upstream ships,
+# which is NOT the same as `eol=lf`: some upstream files are CRLF, and forcing LF
+# on them would break the very identity this is protecting.
+assets/en/** -text
+assets/zh/** -text

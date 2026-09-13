@@ -8,8 +8,16 @@
 //   - assets/zh/** persona files are owned by the translation stage and are never
 //     written here. Only assets/zh/LICENSE is created by this script.
 //   - Running twice in a row changes nothing on disk.
+//   - Offline by default. A plain run never touches the network: it compares the
+//     checkout against the remote-tracking ref it already has and warns when that
+//     ref has moved on. `--pull` is the explicit opt-in to `git fetch` +
+//     fast-forward, so the same command still produces the same bytes on a
+//     machine with no network.
 //
-// Run with: pnpm sync   (node is not on PATH in this environment)
+// Run with: pnpm sync            (sync what the local checkout already has)
+//           pnpm sync -- --pull  (fetch + fast-forward first)
+//           pnpm sync:upstream   (that, plus the authoring report and the gates)
+//           node is not on PATH in this environment.
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -45,14 +53,26 @@ function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex')
 }
 
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { encoding: 'utf8', ...options })
-  if (result.error !== undefined && result.error !== null) throw result.error
-  if (result.status !== 0) {
-    const detail = (result.stderr ?? '').trim()
-    throw new Error(`${command} ${args.join(' ')} failed (${result.status})${detail === '' ? '' : `: ${detail}`}`)
+/** Run without throwing, so a probe can treat "git said no" as an answer. */
+function probe(command, args) {
+  const result = spawnSync(command, args, { encoding: 'utf8' })
+  if (result.error !== undefined && result.error !== null) {
+    return { ok: false, status: null, stdout: '', stderr: String(result.error.message ?? result.error) }
   }
-  return (result.stdout ?? '').trim()
+  return {
+    ok: result.status === 0,
+    status: result.status,
+    stdout: (result.stdout ?? '').trim(),
+    stderr: (result.stderr ?? '').trim(),
+  }
+}
+
+function run(command, args) {
+  const result = probe(command, args)
+  if (!result.ok) {
+    throw new Error(`${command} ${args.join(' ')} failed (${result.status})${result.stderr === '' ? '' : `: ${result.stderr}`}`)
+  }
+  return result.stdout
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +110,71 @@ function readCommit(dir) {
   } catch {
     return 'unknown'
   }
+}
+
+/**
+ * How far the checkout sits behind its own remote-tracking ref.
+ *
+ * `HEAD..@{u}` reads no network — it compares against the ref as it was last
+ * fetched, which is exactly the signal a sync needs before it copies anything.
+ * A checkout with no upstream branch (`@{u}` unresolvable) returns null.
+ */
+function commitsBehind(dir) {
+  const branch = probe('git', ['-C', dir, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])
+  if (!branch.ok || branch.stdout === '') return null
+  const count = probe('git', ['-C', dir, 'rev-list', '--count', 'HEAD..@{u}'])
+  if (!count.ok) return null
+  const behind = Number.parseInt(count.stdout, 10)
+  return Number.isNaN(behind) ? null : { ref: branch.stdout, behind }
+}
+
+/**
+ * Decide whether the checkout is current, and optionally make it so.
+ *
+ * The point of this function is that a stale checkout used to sync silently: the
+ * script copied whatever it found and reported success. Now a stale checkout is
+ * either refreshed (`--pull`) or announced.
+ */
+async function refreshUpstream(upstream, options) {
+  const { dir } = upstream
+  if (!probe('git', ['-C', dir, 'rev-parse', '--git-dir']).ok) {
+    log(`upstream: ${upstream.source} is not a git checkout, so its freshness cannot be checked`)
+    return { before: null, after: null, pulled: false }
+  }
+
+  const before = readCommit(dir)
+
+  if (!options.pull) {
+    const behind = commitsBehind(dir)
+    if (behind !== null && behind.behind > 0) {
+      log('')
+      log(`WARNING: this checkout is ${behind.behind} commit(s) behind ${behind.ref}, as last fetched.`)
+      log('         Syncing now copies the OLD content and still reports success.')
+      log('         Run `pnpm sync:upstream` to fetch and fast-forward first.')
+      log('')
+    }
+    return { before, after: before, pulled: false }
+  }
+
+  // Fetch first, then measure: counting before the fetch would report the stale
+  // ref's lag and understate how far behind the checkout really is.
+  log('upstream: fetching origin')
+  run('git', ['-C', dir, 'fetch', '--quiet', 'origin'])
+  const behind = commitsBehind(dir)
+  if (behind === null) {
+    throw new Error(
+      `${dir} has no upstream branch to pull from; set one, or point AGENCY_UPSTREAM at a fresh clone`,
+    )
+  }
+  if (behind.behind === 0) {
+    log(`upstream: already current with ${behind.ref} (${before.slice(0, 12)})`)
+    return { before, after: before, pulled: false }
+  }
+  log(`upstream: ${behind.behind} new commit(s) on ${behind.ref}; fast-forwarding`)
+  run('git', ['-C', dir, 'merge', '--ff-only', '@{u}'])
+  const after = readCommit(dir)
+  log(`upstream: ${before.slice(0, 12)} -> ${after.slice(0, 12)}`)
+  return { before, after, pulled: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -179,10 +264,23 @@ async function copyIfChanged(source, destination) {
 
 async function main() {
   const upstream = await resolveUpstream()
+  const refresh = await refreshUpstream(upstream, options)
   const commit = readCommit(upstream.dir)
   const divisions = await readDivisions(upstream.dir)
   log(`upstream commit: ${commit}`)
   log(`divisions: ${Object.keys(divisions).length}`)
+
+  // Read the previous manifest before overwriting it: the delta between the two
+  // is the only trustworthy way to say "the roster moved", and it names the keys
+  // rather than comparing against a constant that would need editing every time
+  // upstream adds an expert.
+  const previousText = (await exists(manifestPath)) ? await readFile(manifestPath, 'utf8') : null
+  let previousFiles = {}
+  try {
+    previousFiles = JSON.parse(previousText ?? '{}').files ?? {}
+  } catch {
+    previousFiles = {}
+  }
 
   // assets/en/<division>/<slug>.md, flattened, subdirectories stripped.
   const files = {}
@@ -271,7 +369,7 @@ async function main() {
   }
 
   await mkdir(path.dirname(manifestPath), { recursive: true })
-  const previous = (await exists(manifestPath)) ? await readFile(manifestPath, 'utf8') : null
+  const previous = previousText
   const candidate = `${JSON.stringify(manifest, null, 2)}\n`
   // A no-op sync must leave the committed manifest byte-identical. Keep the
   // previous timestamp whenever the timestamp is the only thing that would move,
@@ -291,20 +389,62 @@ async function main() {
   log(`zh missing:  ${zhMissing}  current: ${zhCurrent}  stale: ${zhStale}`)
   log(`manifest:    ${manifestChanged ? 'updated' : 'unchanged'} -> ${path.relative(projectRoot, manifestPath)}`)
 
-  const expected = 279
-  if (agents !== expected) {
-    log(`WARNING: expected ${expected} agents, found ${agents}`)
+  // -- roster delta ---------------------------------------------------------
+  const previousKeys = new Set(Object.keys(previousFiles))
+  const currentKeys = Object.keys(files)
+  const added = currentKeys.filter((key) => !previousKeys.has(key)).sort()
+  const dropped = [...previousKeys].filter((key) => !(key in files)).sort()
+  log('')
+  if (previousText === null) {
+    log(`roster:      ${agents} (no previous manifest, so there is nothing to compare against)`)
+  } else if (added.length === 0 && dropped.length === 0) {
+    log(`roster:      ${agents} (unchanged)`)
+  } else {
+    log(`roster:      ${previousKeys.size} -> ${agents}`)
+    if (added.length > 0) {
+      log(`  upstream added (${added.length}):`)
+      for (const key of added) log(`    + ${key}`)
+    }
+    if (dropped.length > 0) {
+      log(`  gone from upstream (${dropped.length}):`)
+      for (const key of dropped) log(`    - ${key}`)
+      log('    assets/en and assets/zh still hold these; `pnpm authoring` names the deletions.')
+    }
+  }
+
+  if (added.length > 0) {
+    log('')
+    log('next: `pnpm authoring` lists the Chinese profile and avatar each new expert still needs.')
   }
 }
 
 /**
  * fetchedAt moves on every run, so compare everything except that timestamp when
  * deciding whether the manifest actually changed.
+ *
+ * Normalise CRLF first. `git checkout` rewrites a modified file with CRLF when
+ * core.autocrlf is true (the Git for Windows default), and then the trailing
+ * `\n` in the pattern below no longer matches. That made a content-identical
+ * manifest look changed and get rewritten on the first sync after any checkout —
+ * the exact "running twice changes nothing on disk" invariant this file opens
+ * with, broken by the checkout rather than by the sync.
  */
 function sameManifest(previous, next) {
-  const strip = (text) => text.replace(/"fetchedAt": "[^"]*",\n/, '')
+  const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*",\n/, '')
   return strip(previous) === strip(next)
 }
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
+const argv = process.argv.slice(2)
+const unknownFlags = argv.filter((flag) => flag !== '--pull')
+if (unknownFlags.length > 0) {
+  process.stderr.write(`sync: unknown argument(s): ${unknownFlags.join(', ')}  (usage: sync.mjs [--pull])\n`)
+  process.exit(1)
+}
+const options = { pull: argv.includes('--pull') }
 
 const startedAt = Date.now()
 try {

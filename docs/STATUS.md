@@ -446,12 +446,65 @@ DSH 看到的就是仓库本身。剩下的唯一问题是**重建后 DSH 会不
 
 **不能自动的两件事**（要分清）：
 
-1. **上游新增专家**。`pnpm sync` 能把新的英文档案拉下来，但新专家需要**手写中文名 / 一句话简介 / 中文简介**，还要配头像。`pnpm check` 会精确报出缺哪些 —— **能自动到"发现"，不能自动到"补齐"**。
+1. **上游新增专家**。见 **5.15**：新增了 `pnpm sync:upstream` 一条龙，能自动到**「拉取 + 点名」**，**不能自动到「补齐」** —— 中文名 / 一句话简介 / 中文简介 / 头像仍然要人写。
 2. **别的机器上更新**。junction 是本机的；换机器要 `npm publish` 后由 `dshmarket` 更新。从本机发布时 `lib/client.js` 里已内联头像，而 `assets/avatar` 被 `files` 排除，所以包里有图、没素材。
 
 **两个注意**：热替换会丢弃被重载插件内的 React 状态（例如正在编辑的自定义专家草稿）；`pnpm dev` 不跑 typecheck，提交前仍要 `pnpm build`。
 
 
+
+## 5.15 上游内容更新流程：`pnpm sync:upstream`（2026-09-13）
+
+用户问「我的上游专家来源新增了专家，我这里要怎么更新」。查清后发现**两条坑叠在一起，会让「上游更新了」完全静默**：
+
+1. **`sync/sync.mjs` 从不 pull。** 它只读取它找到的 checkout（`sync/.cache/agency-agents` 或 `G:\dsh\agency-agents`），拷完报成功。checkout 是旧的，同步出来的就是旧内容，**看不出任何异常**。
+2. **新增专家不是门禁失败。** `checks.mjs` 的 `HARD_FAILURE_CHECKS` 里没有 `missing` —— 没有中文档案的专家会降级为英文人设，只计入 `missing`。所以上游加了三位专家、这边一个字没写，**`pnpm check` 照样 12 项全绿、退出 0**，stdout 只有一行 `missing files (3): listed in sync/report.json under piles.missing`，key 藏在 JSON 里。
+
+> **所以 5.14 里「`pnpm check` 会精确报出缺哪些」是错的**：它报的是**数量**不是清单，而且不构成「需要处理」的信号。补上这个缺口的就是本节。
+
+### 加了什么
+
+| 文件 | 改动 |
+|---|---|
+| `sync/sync.mjs` | 新增 `--pull`（`git fetch` + `--ff-only` 快进）。**默认仍然离线**，但会对比上次 fetch 留下的 `origin/main` 引用，落后就打印 WARNING。另外把写死的 `expected = 279` 换成与上一份 manifest 的**逐 key 差量**（`roster: 279 -> 281` 并逐个点名）—— 那个常量本来每加一位专家都得手改 |
+| `sync/authoring.mjs`（新） | 把差异分成六类，逐个点名**确切的文件路径**，并写出 `sync/authoring.json`。有待办时退出 1 |
+| `sync/upstream.mjs`（新） | 一键驱动：pull → sync → authoring → check，末尾给汇总表 |
+| `scripts/avatar-manifest.mjs` | 头像 brief 里「目标 ≤ 600 KB（279 张合计）」改为派生自 `rows.length` —— 名册一涨那行就是错的。当前输出不变，所以 `docs/AVATARS.md` 没有 diff |
+
+**命名**：`pnpm update` **不能用** —— 那是 pnpm 的内置命令（`up` 的别名），同名脚本会被内置命令盖掉。故选 `sync:upstream`（与 `sync` / `sync:stamp` 同族），报告单独跑是 `pnpm authoring`。
+**为什么驱动是 node 而不是 package.json 里的 `&&` 链**：authoring **正是「有待办」时退出非 0**，`&&` 会让后面的门禁永远跑不到；而且 shell 链在 Windows 上要换语法。
+
+### 六类判定
+
+`enOutOfSync`（英文资产落后）、`divisionDrift`（分区集合变了，**要改三处代码**）、`missingZh`（缺中文档案）、`staleZh`（英文变了、译文基于旧版）、`unstamped`（没盖 `sourceSha256`）、`removedUpstream`（上游删了、本地还在）。**头像单独列且不计入待办** —— emoji 是文档承诺的兜底，素材允许分批交。逐条含义与处理方式见 [`UPDATE.md`](UPDATE.md)。
+
+### 怎么验证的
+
+在 `%TEMP%` 下用 `robocopy` 复制出真实上游工作树 → `git init` → bare server → 两个 clone，搭出一套带远端的模拟上游，然后逐个触发（全部命中）：
+
+| 模拟动作 | 结果 |
+|---|---|
+| 上游提交了新专家，但从不 fetch | `pnpm sync` 报「无变化」——**这就是第 1 条坑，实测复现** |
+| 只 `git fetch`（引用动、HEAD 不动）后再 `pnpm sync` | 打印落后 1 个提交的 WARNING |
+| 手动快进 checkout、不跑 sync | `enOutOfSync` 点名 `engineering-backend-architect` |
+| `pnpm sync:upstream` | `1 new commit(s) on origin/main; fast-forwarding`，`e08e10278a27 -> 213d579607e3`，`roster: 279 -> 281` 并逐个点名 |
+| 上游在已有分区加一位专家 | `missingZh` 带 name / emoji / description / 目标路径 |
+| 上游新增 `quantum` 分区 | `divisionDrift` 提示三处登记 |
+| 上游改了已有专家的人设 | `staleZh` 点名；门禁 `translation-freshness` 只是 **WARN**（该档案是 intro-only），11 项 PASS / `missing: 2` |
+| 手动抹掉某档案的 `sourceSha256` | `unstamped` 点名，待办 4 → 5 |
+| 上游删掉一位专家 | `removedUpstream` 点名要删的两个文件；门禁 `english-byte-identity` **FAIL** + `manifest-coverage` **FAIL**，`suspect files` 里出现该专家 |
+| 新专家还没配头像 | 列在可选区、不计入待办，文案提示 emoji 兜底 |
+
+验证后仓库已还原到 279 基线（`assets/en` 与 `sync/manifest.json` 由 git 恢复，`assets/en` 下未跟踪的新增用 `git clean -fd assets/en` 清掉；预演过 `git clean -fdn` 才执行）。
+
+### 已知限制（写进文档了，不是待办）
+
+**离线的 `pnpm sync` 无法知道上游动没动。** 它只能对比**上次 fetch 时**留下的 `origin/main` 引用：落后于这个引用会告警，但这个引用本身旧的话它无从判断 —— 「远端有没有新提交」必须联网才知道。所以**想知道上游有没有新专家，就跑 `pnpm sync:upstream`**。让 `pnpm sync` 保持离线是刻意的：同一个命令在没有网络的机器上仍然产出同样的字节。
+
+### 踩到的两个工具坑（都是老坑的新实例）
+
+- **`& $exe script.mjs` 对 GUI 子系统程序不等待。** 第一次跑驱动时输出为空、`$LASTEXITCODE` 是 0，看起来像「驱动没输出且成功」，实际是 pwsh 提前走人、子进程被掐死在「已 `git merge` 完但还没拷文件」的中间态 —— checkout 被移动了，`assets/en` 却没动。**要等就用 `Start-Process -NoNewWindow -Wait -PassThru -RedirectStandardOutput <文件>`**，日志再用 read 工具看（`Get-Content` 会把 UTF-8 中文按 ANSI 解成乱码）。
+- **`Select-Object -First N` 会提前掐断上游管道**，把被包装的进程一起杀掉，于是退出码变成 1、输出被截断。要么 `-Last N`，要么先赋值给变量。
 
 ## 6. 环境要点（重开会话必读）
 

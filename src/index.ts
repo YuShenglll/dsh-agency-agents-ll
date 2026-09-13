@@ -6,6 +6,7 @@
  * exposes a summonable expert roster:
  *
  *   - `list_experts(division?)`            browse the roster grouped by division.
+ *   - `describe_expert(expert)`            one expert's name, summary and intro.
  *   - `summon_expert(expert, task)`        delegate one task to one expert.
  *   - `summon_experts(experts[])`          run several experts in parallel.
  *

@@ -4,13 +4,13 @@ DeepSeek Harness 的**中英双语** The Agency 专家名册插件 —— 专家
 
 Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert names and introductions are Chinese; the persona prompt switches language.
 
-> 状态：**P0–P4 完成并已在 DSH 上运行**，279 位专家的中英文档案全部通过机械门禁。各阶段的实测证据、尚未验证的路径与环境要点见 [`docs/STATUS.md`](docs/STATUS.md)。
+> 状态：**P0–P6 完成并已在 DSH 上运行**，279 位专家的中英文档案与 279 张专属头像全部通过机械门禁。各阶段的实测证据、尚未验证的路径与环境要点见 [`docs/STATUS.md`](docs/STATUS.md)。
 
 ## 它做什么
 
-- 收录 **279 位专家 / 18 个分区**：工程、设计、市场、销售、金融、安全、产品、项目管理、游戏开发、GIS、空间计算、学术、医疗健康、支持、测试等。
+- 收录 **279 位专家 / 18 个分区**：学术、设计、工程、金融、游戏开发、地理信息、医疗健康、市场营销、付费媒体、产品、项目管理、研究、销售、安全、空间计算、专业、支持、测试。分区名的唯一真源是 [`src/names.ts`](src/names.ts)。
 - 每位专家有一份**中文档案**：中文名、一句话简介，以及一段**中文简介**——讲清这个专家是什么角色、擅长什么、什么时候该找他、交付什么。
-- 每位专家有一张**专属头像**（279 张原创贴纸风格 SVG，见 [`docs/AVATARS.md`](docs/AVATARS.md)），在名册卡片上显示。
+- 每位专家有一张**专属头像**（279 张 AI 生成、项目自有的贴纸风格 SVG，见 [`docs/AVATARS.md`](docs/AVATARS.md)），在名册卡片上按素材原尺寸显示。
 - 专家**名称与简介固定中文**，不随提示词语言变化。
 - 召唤专家时，persona 正文默认用**英文原文**（上游权威版本），需要时切中文。
 
@@ -26,12 +26,15 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 中英档案是**同一份档案的两种形态**：只有简介的叫 `intro-only`，另有完整中文正文的叫 `translated`。两种都是合法且完整的档案——没有中文正文不会让专家不可用，只是召唤时用英文。
 
+**现状：279 位里 6 位带中文正文**（其余 273 位是 `intro-only`）。中文名与中文简介是**每一位都有**的，不受这个比例影响。
+
 ## 内容来源
 
 | 产物 | 来源 | 许可 |
 |---|---|---|
 | 英文 persona（`assets/en/`） | [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents)，逐字节同步，不改写 | MIT |
 | 中文档案（`assets/zh/`） | 本项目撰写，基于英文的演绎作品 | 随附上游 MIT 原文 |
+| 专家头像（`assets/avatar/`） | 本项目，AI 生成后经人工筛选与校验，未使用任何第三方图标集 | Apache-2.0 |
 | 源码、构建脚本、文档 | 本项目 | Apache-2.0 |
 
 英文一变，对应中文即按源文件哈希标记为过期：**带正文的过期是发布门禁的硬失败**（旧中文人设配新英文指令会误导被召唤的专家），**只有简介的过期只是告警**。见 [`docs/PLAN.md`](docs/PLAN.md) 第 3 节。
@@ -42,11 +45,13 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 | 检查 | 施加对象 | 硬失败 |
 |---|---|---|
-| 中文档案必填 `name` / `description` / `intro` / `emoji` | 全部 | 是 |
-| 简介 40–600 汉字 | 全部 | 是 |
-| 英文逐字节对齐上游基线 | 全部 | 是 |
-| 代码围栏闭合 | 全部 | 是 |
-| 翻译新鲜度 | 带正文时硬失败，仅简介时告警 | 视形态 |
+| 中文档案必填 `name` / `description` / `intro` / `emoji`（`frontmatter`） | 全部 | 是 |
+| 简介 40–600 汉字（`intro`） | 全部 | 是 |
+| 英文逐字节对齐上游基线（`english-byte-identity`） | 全部 | 是 |
+| 代码围栏闭合（`code-fences`） | 全部 | 是 |
+| manifest 覆盖完整（`manifest-coverage`） | 全部 | 是 |
+| 分区与 slug 集合一致（`slug-sets`） | 全部 | 是 |
+| 翻译新鲜度（`translation-freshness`） | 带正文时硬失败，仅简介时告警 | 视形态 |
 | 段落数、标题层级、长度比、术语表、残留外文 | **仅带正文的档案** | 否 |
 
 结构性检查只对比「有正文可对比」的档案；只有简介的档案不会被这些检查判失败。
@@ -65,6 +70,7 @@ pnpm sync:stamp       # 为中文档案盖 sourceSha256（从磁盘推导，不�
 pnpm check            # 12 项机械门禁
 pnpm sync:calibrate   # 用本项目自己的译文对重测长度比区间
 pnpm avatars          # 重新生成 docs/AVATARS.md（卡片头像规格 + 279 个 slug 清单）
+pnpm avatars:check <目录>  # 校验一批头像交付：缺/多/超限/viewBox/禁用元素
 pnpm avatars:inline   # 由 assets/avatar 重新生成 src/client/avatars.ts（改素材后必跑）
 ```
 

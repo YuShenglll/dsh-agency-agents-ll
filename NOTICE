@@ -14,4 +14,9 @@ Copyright 2026 dsh-agency-agents-ll contributors
    本项目基于上述英文 persona 翻译与精校，属其演绎作品，
    因此继续采用 MIT License，完整文本见 assets/zh/LICENSE。
 
+3. 专家头像（assets/avatar/、src/client/avatars.ts）
+   本项目自行生成的原创素材，由 AI 图像工具生成后经人工筛选与校验，
+   未使用任何第三方图标集。采用 Apache License 2.0，与项目源码一致。
+   逐专家的清单与规格见 docs/AVATARS.md。
+
 同步基线与逐文件校验值记录在 sync/manifest.json。

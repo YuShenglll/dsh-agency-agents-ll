@@ -10,6 +10,7 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 - 收录 **279 位专家 / 18 个分区**：工程、设计、市场、销售、金融、安全、产品、项目管理、游戏开发、GIS、空间计算、学术、医疗健康、支持、测试等。
 - 每位专家有一份**中文档案**：中文名、一句话简介，以及一段**中文简介**——讲清这个专家是什么角色、擅长什么、什么时候该找他、交付什么。
+- 每位专家有一张**专属头像**（279 张原创贴纸风格 SVG，见 [`docs/AVATARS.md`](docs/AVATARS.md)），在名册卡片上显示。
 - 专家**名称与简介固定中文**，不随提示词语言变化。
 - 召唤专家时，persona 正文默认用**英文原文**（上游权威版本），需要时切中文。
 
@@ -64,6 +65,7 @@ pnpm sync:stamp       # 为中文档案盖 sourceSha256（从磁盘推导，不�
 pnpm check            # 12 项机械门禁
 pnpm sync:calibrate   # 用本项目自己的译文对重测长度比区间
 pnpm avatars          # 重新生成 docs/AVATARS.md（卡片头像规格 + 279 个 slug 清单）
+pnpm avatars:inline   # 由 assets/avatar 重新生成 src/client/avatars.ts（改素材后必跑）
 ```
 
 本地安装到 DSH profile：

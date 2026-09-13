@@ -36,6 +36,8 @@ import {
   type ExpertSummary,
 } from '../expert-contract.js'
 import { acceptCatalog, catalogState, catalogSubscription, refreshCatalog, subscribeCatalog, writeEnabled } from './catalog.js'
+// Generated from assets/avatar; the roster's own artwork, keyed by slug.
+import { AVATARS } from './avatars.js'
 import { DICTIONARIES, formatClient, type AgencyClientKey } from './locales.js'
 import type { AgencyRosterRemote } from './remote.js'
 import TYPERT_REMOTE from './remote.js'
@@ -287,6 +289,7 @@ const CSS = `
 .aall-card-body{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
 .aall-card-head{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:start}
 .aall-emoji{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--dsw-alias-bg-layer-3);font-size:18px}
+.aall-avatar{display:block;width:100%;height:100%;border-radius:50%}
 .aall-identity{min-width:0}
 .aall-name{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:15px;font-weight:650;line-height:22px}
 .aall-name-en{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400}
@@ -731,13 +734,26 @@ interface CardProps {
 const RosterCard = React.memo(function RosterCard(props: CardProps): React.ReactElement {
   const { expert, on, t } = props
   const label = t(on ? 'toggle.disable' : 'toggle.enable')
+  // The avatar travels as a data URI inside the client bundle, because the
+  // browser cannot read the Host's asset tree. An expert with no artwork yet
+  // keeps its frontmatter emoji, so a roster entry added upstream still renders.
+  const avatar = AVATARS[expert.slug]
   return React.createElement('div', { className: 'aall-card', 'data-enabled': on },
     React.createElement('div', { className: 'aall-card-body' },
       // The head is the only gridded row. Everything below it spans the card, so
       // the introduction starts at the card's own left edge and ends at the same
       // right edge the switch sits on.
       React.createElement('div', { className: 'aall-card-head' },
-        React.createElement('div', { className: 'aall-emoji', 'aria-hidden': true }, expert.emoji),
+        React.createElement('div', { className: 'aall-emoji' },
+          avatar === undefined
+            ? React.createElement('span', { 'aria-hidden': true }, expert.emoji)
+            : React.createElement('img', {
+              className: 'aall-avatar',
+              src: avatar,
+              alt: '',
+              loading: 'lazy',
+              decoding: 'async',
+            })),
         React.createElement('div', { className: 'aall-identity' },
           React.createElement('div', { className: 'aall-name' },
             React.createElement('span', null, expert.name),

@@ -43,6 +43,7 @@
     "sync:calibrate": "node sync/calibrate-ratio.mjs",
     "avatars": "node scripts/avatar-manifest.mjs",
     "avatars:check": "node scripts/avatar-check.mjs",
+    "avatars:inline": "node scripts/avatars-inline.mjs",
     "prepublishOnly": "pnpm build && pnpm test && pnpm verify && pnpm check"
   },
   "dsh": {

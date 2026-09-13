@@ -6,9 +6,9 @@
 
 插件已建成并**在 desktop profile 上运行**：DeepSeek Harness 的中英双语 Agency 专家名册，279 位专家 / 18 个分区，中文名与中文简介齐备，提示词语言可切换，Host 工具与浏览器端均可用。
 
-> **当前唯一在等的事**：用户准备提供 **279 张专家头像 SVG**（一个专家一张）。
-> 规格与逐条 slug 清单在 [`AVATARS.md`](AVATARS.md)，用 `pnpm avatars` 重新生成。
-> **资产未到之前卡片继续显示 emoji —— 那是设计好的兜底，不是缺失。**
+> **现在唯一还没验的**：**卡片头像在浅色与深色主题下的真机效果**（见 5.10）。
+> 素材本身 279/279 通过全部格式校验，也已在浏览器里接上，但没有人用眼睛在真实卡片里看过。
+> 除这件事以外没有进行中的改动，工作区干净。
 > 除这件事以外没有任何进行中的改动，工作区干净。
 
 > **5.6–5.9 是同一个问题的四轮收敛**：设置面板的滚动条随名册长短出现/消失，内容框宽度差 8px。
@@ -26,15 +26,15 @@
 | P2 中文档案 | ✅ | 279 份 `aligned`，0 suspect / 0 missing；简介中位数 232 汉字 |
 | P3 Host 功能 | ✅ | 4 个工具在线（`list_experts` / `describe_expert` / `summon_expert` / `summon_experts`） |
 | P4 客户端 + Remote | ✅ | 用户已在浏览器验收；2026-09-13 修掉界面锁死与白屏（5.1），随后八轮界面优化与修复（5.2–5.9）。**其中 5.6–5.9 是同一个「内容框宽度随滚动条变化」的四轮收敛** |
-| P5 发布 | ⏳ | 只差打 tag。建议在真实召唤一次专家之后再打 |
-| P6 头像 | ⏳ | **等用户交付素材**；规格与清单已就绪（见 §1 与 `AVATARS.md`） |
+| P5 发布 | ⏳ | 只差打 tag。建议在真实召唤一次专家之后再做 |
+| P6 头像 | ✅ | 279/279 交付、校验、接入（见 5.10）。`verify` 三条门禁钉住一致性；**只差真机看一眼明暗主题** |
 
-**门禁现状（2026-09-13，HEAD `f48f452`）**：
+**门禁现状（2026-09-13，HEAD 见 `git log`）**：
 
 ```
 pnpm build   exit=0
-pnpm test    58 passed   （remote 13 + host 24 + client/jsdom 21）
-pnpm verify  exit=0      31 项
+pnpm test    59 passed   （remote 13 + host 24 + client/jsdom 22）
+pnpm verify  exit=0      34 项
 pnpm check   exit=0      12 项，roster 279 / aligned 279 / suspect 0 / missing 0
 ```
 
@@ -266,37 +266,53 @@ describe_expert(上线就绪度评审专家)
 
 **同时值得记住的教训**：连续三轮都在这一个 8px 上打转，前两轮分别治了「会生长的字段」和「右锚定的按钮」—— 都是症状。**只要容器内容框的宽度会变，任何占满宽度的东西都会抖**，应该第一轮就去锁宽度。诊断时先问「什么东西的尺寸在变」，而不是「哪个元素在动」。
 
-## 5.10 头像素材：规格已定，等交付（2026-09-13）
+## 5.10 专家头像：规格、交付、接入（2026-09-13，已完成）
 
-用户决定**替换卡片左上角的圆形头像**（现在是各专家 frontmatter 里的 emoji），按**专家**提供，共 **279 张**。风格由用户自定。
+用户决定**替换卡片左上角的圆形头像**（原来是各专家 frontmatter 里的 emoji），按**专家**提供，共 **279 张**。
 
-**范围限定**：用户明确说"只优化卡片中的图片，其他的地方都不动了" —— 所以**插件里那 4 个 UI 图标（`SparkIcon` / `EyeIcon` / `CopyIcon` / `PlusIcon`）保持现状**，不要一起换。
+**范围限定**：用户明确说"只优化卡片中的图片，其他的地方都不动了" —— 所以**插件里那 4 个 UI 图标（`SparkIcon` / `EyeIcon` / `CopyIcon` / `PlusIcon`）保持现状**，没有一起换。
 
-**一个决定性约束**：浏览器那一半**读不到 `assets/` 目录**（那是宿主磁盘上的，客户端只能通过 RPC 拿数据）。所以 279 张图只能**内联进客户端包**，这就锁死了格式：
+### 一个决定性约束：必须内联
 
-- 279 张 SVG ≈ 200–600 KB → 可以接受
-- 同样数量的 PNG 是几 MB → **走不通**
+浏览器那一半**读不到 `assets/`**（那是宿主磁盘上的，客户端只能通过 RPC 拿数据）。所以 279 张只能**内联进客户端包**，这就锁死了格式：279 张 SVG 约 220 KB 可以接受，同样数量的 PNG 是几 MB —— **走不通**。SVG 是硬要求，不是偏好。
 
-**所以 SVG 是硬要求，不是偏好。** 规格全文在 [`AVATARS.md`](AVATARS.md)，要点：正方形 `viewBox`（推荐 48×48）、渲染 36×36、**内容须落在内切圆内**、透明背景、**浅色与深色主题下都要看得清**、单文件 ≤ 2 KB（硬上限 5 KB）、文件名主干 = slug。
+### 交付与校验
 
-**已建的基础设施**：
+素材来自 `G:\dsh\图标\avatars-sticker-20260913`（手绘贴纸风格：粉彩填充 + 深棕描边 + 奶油色高光边）。**实测全部达标，且好于规格**：
+
+| 我的要求 | 实际 |
+|---|---|
+| 文件名 = slug，279 个 | **279 / 279 精确对应**，无缺无多 |
+| 总体积 ≤ 600 KB | **217 KB** |
+| 单文件 ≤ 2 KB（硬上限 5 KB） | 最大 **1434 B**，平均 797 B |
+| 正方形 `viewBox` | 全部 `0 0 48 48` |
+| 禁用元素 | 一个都没有 |
+| `id` 属性 | **一个都没有** —— 279 个内联也不会撞名，省掉了命名空间那一步 |
+
+**授权：用户确认是 AI 生成**，已记入 `NOTICE` 第 3 条（Apache-2.0，与源码一致）。
+
+### 接入方式
 
 | 东西 | 作用 |
 |---|---|
-| `docs/AVATARS.md` | 规格 + 279 行清单（slug / 中文名 / 英文名 / 当前 emoji） |
-| `scripts/avatar-manifest.mjs` | 从 `assets/en` 推导清单，导出 `roster()` 供门禁复用 |
-| `pnpm avatars` | 重新生成清单 |
-| `pnpm verify` 第 31 项 | 清单必须**逐条按序**对应当前名册；实测删一行会报 `清单 278 条，名册 279 条` |
+| `assets/avatar/*.svg` | **源**：279 个素材，新目录，绝不碰 `assets/en/` |
+| `scripts/avatars-inline.mjs` | 生成 `src/client/avatars.ts`（slug → `data:image/svg+xml,…`） |
+| `pnpm avatars:inline` | 重新生成 |
+| `pnpm avatars:check <目录>` | 校验一批交付：缺 / 多 / 超限 / viewBox / 禁用元素 |
+| `pnpm avatars` | 重新生成 `docs/AVATARS.md`（规格 + 清单） |
+| `pnpm verify` 三条新门禁 | ① 生成文件与素材树逐字节一致 ② 每张图都能对上名册 ③ 每个专家都有图 |
 
-**接入时的待办**（素材到了之后）：
+**三个关键决定**：
 
-1. 校验：每个文件名都在名册里、体积达标、没有 `id` 冲突（构建时加命名空间）
-2. 生成一个 slug → SVG 的映射模块，内联进客户端包
-3. 卡片改为**有图用图、无图回退 emoji**（emoji 兜底是设计的一部分，别删）
-4. 体积回归：`lib/client.js` 当前 250 KB，加完预计 450–850 KB，要重新记录基准
-5. 浅色 / 深色两个主题各看一眼（这是最容易翻车的地方）
+1. **生成文件提交进仓库，不在构建时生成。** 一个必须在 `tsc` 和 vitest 之前就存在的文件，会把构建变成一串"顺序别搞错"的陷阱。提交它，任何入口从干净检出都能直接跑，再用 `verify` 证明它没漂移。**实测过：改一个素材不重新生成 → `失败：src/client/avatars.ts 与 assets/avatar 一致`，exit 1。**
+2. **在生成时就把 SVG 转成 data URI，不在渲染时转。** 卡片只做一次查表。
+3. **`encodeURIComponent` 是必须的，不是洁癖。** 素材用 `#RRGGBB` 上色，**未经转义的 `#` 会开启 URL 片段、把图片从第一个颜色处截断**。测试里有一条专门断言 `src` 里不含裸 `#`。
 
-**还没问到的**：素材的**授权**。仓库是 Apache-2.0 带 NOTICE 文件，交付时需要知道许可证好在里面署名。
+**渲染**：`<img src="data:…">`，不是内联 DOM —— 不需要 `dangerouslySetInnerHTML`，而且 SVG 作为 `<img>` **不能执行脚本**。**无图回退 emoji**，所以上游以后新增专家不会出现空白。
+
+**体积**：`lib/client.js` 从 **250 KB → 625 KB**。生成文件本身 362 KB（比 222 KB 原始素材大 63%，因为 `encodeURIComponent` 会把 `<` `>` `"` `=` 全部转义）。对一个本地插件可以接受；换掉它是后面的事。
+
+**仍未做**：**明暗两个主题的真机核对**。素材作者自带的预览显示 36px 圆形在深色下很清楚（奶油色描边起了分隔作用），但那是他的预览页，不是我们的卡片。
 
 
 
@@ -313,13 +329,15 @@ describe_expert(上线就绪度评审专家)
 ```powershell
 cd G:\dsh\dsh-agency-agents-ll
 pnpm build              # typecheck + tsdown（Host ESM / 客户端 ModuleLoader CJS）
-pnpm exec vitest run    # 58 项：remote 13 + host 24 + 客户端 jsdom 21
-pnpm verify             # 31 项发布门禁
+pnpm exec vitest run    # 59 项：remote 13 + host 24 + 客户端 jsdom 22
+pnpm verify             # 34 项发布门禁
 pnpm check              # 12 项机械门禁 → sync/report.json
 pnpm sync               # 拉上游英文资产、刷新 manifest（幂等）
 pnpm sync:stamp         # 为中文档案盖 sourceSha256（从磁盘推导）
 pnpm sync:calibrate     # 用本项目自己的译文对重测长度比区间
 pnpm avatars            # 重新生成 docs/AVATARS.md（头像规格 + 279 行清单）
+pnpm avatars:check <目录>  # 校验一批头像交付：缺/多/超限/viewBox/禁用元素
+pnpm avatars:inline     # 由 assets/avatar 重新生成 src/client/avatars.ts
 ```
 
 > **改完代码一定先跑 `pnpm build` 再跑测试，不要只跑 vitest。**
@@ -354,11 +372,12 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 
 | 项 | 说明 |
 |---|---|
-| **279 张头像素材** | **唯一在等的事**，见 §1 与 5.10。规格与清单已就绪 |
+| **头像的明暗主题真机核对** | **唯一还没验的事**，见 §1 与 5.10。素材与接线都已就绪 |
 | 卡片宽度随滚动条变 8px | **5.9 已治并经用户实测确认**，不是遗留项 |
 | P5 tag | 只差 `git tag`。建议在真实召唤一次专家之后再打 |
 | `summon_expert` 首次真跑 | 会调用 `ctx.subagents.start`，是本项目唯一还没跑过的主路径 |
-| 客户端包 250 KB | 主要来自内联的 zod（Remote 描述符 codec + 编辑器预校验）。**加头像后会明显变大**（预计 450–850 KB），是下一轮要重新记录的基准 |
+| 客户端包 **625 KB** | 加头像前是 250 KB，头像贡献了 375 KB（其中生成文件 362 KB）。主要构成：内联 zod + 279 张 data URI。要瘦身有两条路：把生成文件改成"存原始 SVG、加载时编码一次"（省约 140 KB），或把编辑器预校验换成手写检查（省 zod） |
+| 生成文件占 362 KB 而素材只有 222 KB | `encodeURIComponent` 会把 `<` `>` `"` `=` 全转义，膨胀 63%。想省这 140 KB 就得改用最小转义（只处理 `#` 和 `%`），但那要赌浏览器对裸 `<`/`>` 的容忍度 —— 目前选择"无聊但一定对" |
 | 参考实现里没有移植的能力 | 「猜宿主设置按钮」的 DOM 启发式。宿主 `ui-settings-general` 本地不可读、无法验证，故不做；菜单空态改为提示「请先在设置页启用」 |
 | 与 `@michengai/dsh-agency-agents` 的关系 | 用户已自行卸载。若两者同时安装会**工具名冲突**（都注册 `list_experts` / `summon_expert` / `summon_experts`） |
 
@@ -366,8 +385,9 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 
 - 改 Host 逻辑 → `src/index.ts`（工具与 catalog）、`src/remote.ts`（Remote 方法）、`src/roster-settings.ts`（enabled 与自定义专家）
 - 改浏览器端 → `src/client/index.ts`（页面与触发器）、`src/client/locales.ts`（词条，zh 为 key 集真源，en 由 `satisfies` 编译期强制一致）
-- 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 **21 条**在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」「滚动条一来自适应布局就跑偏」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰
+- 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 **22 条**在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」「滚动条一来自适应布局就跑偏」「data URI 里漏了个 `#` 转义」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰
 - 改资产或术语 → 动 `assets/`、`sync/glossary.json` 后必须跑 `pnpm sync:stamp && pnpm check`
+- **改头像素材** → 动 `assets/avatar/` 之后**必须跑 `pnpm avatars:inline`**，否则 `pnpm verify` 会红（它逐字节比对生成文件与素材树）。**不要手改 `src/client/avatars.ts`** —— 那是生成文件
 - 改契约 → 先改 `docs/PLAN.md` 再改代码
 - **UI 布局铁律**（在同一个 8px 上踩了三轮才收敛）：**先问「什么东西的尺寸在变」，而不是「哪个元素在动」**。设置面板的滚动区（`.options`，`overflow-y:auto`）在名册非空时有滚动条、清空时没有，**内容框宽度差 8px**（`--dsh-scrollbar-width: 8px`，实占不是覆盖式）。只要这个宽度会变，**任何占满宽度的东西都会抖** —— 卡片、简介折行、右锚定的按钮，全都会。所以现在的做法是**锁死宽度**，而不是逐个元素去躲：
   ```css

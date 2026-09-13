@@ -131,6 +131,24 @@ check(
   `清单 ${briefSlugs.length} 条，名册 ${slugs.length} 条；先跑 pnpm avatars`,
 )
 
+// The committed client module is generated from assets/avatar. Regenerating it
+// here is the only way to know the two still agree; a stale copy would ship
+// artwork that no longer matches the tree it claims to come from.
+const { render: renderAvatars } = await import('./avatars-inline.mjs')
+const inlined = await readFile(new URL('../src/client/avatars.ts', import.meta.url), 'utf8')
+check('src/client/avatars.ts 与 assets/avatar 一致', inlined === renderAvatars(), '先跑 pnpm avatars:inline')
+const inlinedSlugs = [...inlined.matchAll(/^ {2}'([a-z0-9-]+)': 'data:image\/svg\+xml,/gm)].map((match) => match[1])
+check(
+  `每张头像都对应名册里的专家（${inlinedSlugs.length} 张）`,
+  inlinedSlugs.length > 0 && inlinedSlugs.every((slug) => slugs.includes(slug)),
+  inlinedSlugs.filter((slug) => !slugs.includes(slug)).slice(0, 5).join(', '),
+)
+check(
+  '每个专家都有头像',
+  slugs.every((slug) => inlinedSlugs.includes(slug)),
+  `${slugs.filter((slug) => !inlinedSlugs.includes(slug)).length} 个专家没有头像，会回退 emoji`,
+)
+
 if (failures > 0) {
   console.error(`\n${failures} 项验证失败`)
   process.exit(1)

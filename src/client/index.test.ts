@@ -400,6 +400,30 @@ describe('roster page presentation', () => {
     expect(container.querySelector('.aall-card-head > .aall-emoji')).not.toBeNull()
   })
 
+  it('shows the shipped artwork, and the emoji when there is none', async () => {
+    const experts = await shippedRoster()
+    const remote = createRemote(experts)
+    const { component, t } = await mount(remote)
+    await act(async () => { root.render(React.createElement(component, { t })) })
+
+    const images = [...container.querySelectorAll('.aall-avatar')]
+    expect(images.length, 'every shipped expert has artwork').toBe(279)
+    expect(images[0]?.getAttribute('src')).toMatch(/^data:image\/svg\+xml,/)
+    // The artwork paints with #RRGGBB, and a raw # would open a fragment and
+    // truncate the image at the first colour. This is the one real trap in
+    // shipping SVG as a data URI.
+    for (const image of images) {
+      expect(image.getAttribute('src'), 'no raw # in a data URI').not.toContain('#')
+    }
+
+    // A slug with no artwork - a roster entry added upstream, say - keeps the
+    // emoji from its frontmatter rather than rendering an empty circle.
+    const fallback = await mount(createRemote(roster()))
+    await act(async () => { root.render(React.createElement(fallback.component, { t: fallback.t })) })
+    expect(container.querySelectorAll('.aall-avatar').length).toBe(0)
+    expect(container.querySelector('.aall-emoji')?.textContent).toBe('🧭')
+  })
+
   it('keeps the card switch label-free so the introduction reaches further right', async () => {
     const remote = createRemote(roster())
     const { component, t } = await mount(remote)

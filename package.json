@@ -35,6 +35,7 @@
   ],
   "scripts": {
     "build": "pnpm typecheck && tsdown",
+    "dev": "node scripts/avatars-inline.mjs && tsdown --watch",
     "typecheck": "pnpm avatars:inline && tsc --noEmit && tsc -p tsconfig.browser.json",
     "test": "pnpm avatars:inline && vitest run",
     "verify": "pnpm avatars:inline && node scripts/verify.mjs",

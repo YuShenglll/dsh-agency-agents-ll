@@ -419,6 +419,40 @@ const SOURCE_NAME = `${PLUGIN_ID}:@`   // 注册用它，每个引用也携带�
 
 
 
+## 5.14 自动更新：本机已是全自动，缺的只是 watch（2026-09-13）
+
+用户问「如何自动更新这个插件」。查清后发现**本机根本不存在"更新"这一步**，因为 profile 是以 **junction** 指向仓库的：
+
+```
+C:\Users\LL\.dsh\profiles\desktop\node_modules\dsh-agency-agents-ll
+  → Junction → G:\dsh\dsh-agency-agents-ll
+```
+
+DSH 看到的就是仓库本身。剩下的唯一问题是**重建后 DSH 会不会重新加载** —— 会，两个半边都有热重载，**profile 里默认就开着**：
+
+| 半边 | 机制 | 行为 |
+|---|---|---|
+| Host（`lib/index.js`） | `@deepseek-ai/cordis-plugin-hmr`（`launchWatchMs: 1000`） | 文件变化后重载插件 |
+| 浏览器（`lib/client.js`） | `@deepseek-ai/dsh-client-hmr`（`pollIntervalMs: 500`） | 轮询 bundle，**原地热替换，无需刷新** |
+
+**所以缺的只是一个 watch 进程。** 新增 `pnpm dev`（`avatars:inline && tsdown --watch`）：
+
+```
+改源码 → tsdown 自动重建 → DSH 自动热重载两半 → 界面上直接看到
+```
+
+**已实测**：watch 启动后改一行 `src/client/index.ts`，`lib/client.js` 约 4 秒后重建（21:57:13 → 21:57:17），还原后再次重建。
+**顺带得到的证据**：这次重建发生在**本会话运行中**，宿主与浏览器两半都被重载，而我这个 agent 的会话没断 —— 说明热重载对运行中的会话是安全的。
+
+**不能自动的两件事**（要分清）：
+
+1. **上游新增专家**。`pnpm sync` 能把新的英文档案拉下来，但新专家需要**手写中文名 / 一句话简介 / 中文简介**，还要配头像。`pnpm check` 会精确报出缺哪些 —— **能自动到"发现"，不能自动到"补齐"**。
+2. **别的机器上更新**。junction 是本机的；换机器要 `npm publish` 后由 `dshmarket` 更新。从本机发布时 `lib/client.js` 里已内联头像，而 `assets/avatar` 被 `files` 排除，所以包里有图、没素材。
+
+**两个注意**：热替换会丢弃被重载插件内的 React 状态（例如正在编辑的自定义专家草稿）；`pnpm dev` 不跑 typecheck，提交前仍要 `pnpm build`。
+
+
+
 ## 6. 环境要点（重开会话必读）
 
 - **`node` / `npm` 不在 PATH。** `pnpm`（11.8.0）与 `node` 都由 DSH Desktop 的 runtime shim 提供。

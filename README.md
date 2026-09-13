@@ -63,6 +63,7 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 ```powershell
 pnpm install
+pnpm dev              # 开发用：watch 重建，DSH 会自动热重载（见下）
 pnpm build            # typecheck + tsdown：Host 半边 ESM，客户端半边 ModuleLoader CJS
 pnpm exec vitest run  # 单元测试（Host）+ 浏览器端组件测试（jsdom）
 pnpm verify           # 发布门禁（包结构、导出、双语 key 一致、分区名单一真源）
@@ -81,6 +82,25 @@ pnpm avatars:inline   # 由 assets/avatar 重新生成 src/client/avatars.ts（�
 dsh plugin --profile desktop add ./dsh-agency-agents-ll
 dsh --profile desktop --dump-config    # 应看到 dsh-agency-agents-ll 这一层
 ```
+
+### 改完代码怎么生效：不用重装，也不用重启
+
+profile 以 **junction（目录符号链接）**指向本仓库，DSH 看到的就是仓库本身，**不存在"安装/更新"这一步**。而 DSH 默认开着两个热重载机制：
+
+| 半边 | 机制 | 行为 |
+|---|---|---|
+| Host（`lib/index.js`，4 个工具与 Remote 服务） | `@deepseek-ai/cordis-plugin-hmr` | 文件变化后重载插件 |
+| 浏览器（`lib/client.js`，名册页与输入栏按钮） | `@deepseek-ai/dsh-client-hmr` | 每 500ms 轮询 bundle，**原地热替换，无需刷新页面** |
+
+所以只要让 `lib/` 保持最新就够了 —— **开着 `pnpm dev`**（tsdown watch），保存源码后：
+
+```
+改源码  →  tsdown 自动重建  →  DSH 自动热重载两半  →  界面上直接看到
+```
+
+一次也不用刷新、重装或重启。实测：改一行 `src/client/index.ts`，`lib/client.js` 约 4 秒后重建完成。
+
+**两个注意**：热替换会**丢掉被重载插件内的 React 状态**（比如正在编辑的自定义专家草稿）；`pnpm dev` 不跑 typecheck，提交前仍要 `pnpm build`。
 
 ## 目录
 

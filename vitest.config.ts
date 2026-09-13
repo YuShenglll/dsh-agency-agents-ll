@@ -42,5 +42,9 @@ export default defineConfig({
   plugins: [standardDecoratorPlugin()],
   test: {
     include: ['src/**/*.test.ts'],
+    // `src/client/index.ts` imports the generated avatar module statically, and
+    // that module is not committed. Generate it here so a bare `vitest run`
+    // works, not only `pnpm test`.
+    globalSetup: ['./scripts/vitest-avatars.mjs'],
   },
 })

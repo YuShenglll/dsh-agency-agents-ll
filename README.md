@@ -10,7 +10,8 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 - 收录 **279 位专家 / 18 个分区**：学术、设计、工程、金融、游戏开发、地理信息、医疗健康、市场营销、付费媒体、产品、项目管理、研究、销售、安全、空间计算、专业、支持、测试。分区名的唯一真源是 [`src/names.ts`](src/names.ts)。
 - 每位专家有一份**中文档案**：中文名、一句话简介，以及一段**中文简介**——讲清这个专家是什么角色、擅长什么、什么时候该找他、交付什么。
-- 每位专家有一张**专属头像**（279 张 AI 生成、项目自有的贴纸风格 SVG，见 [`docs/AVATARS.md`](docs/AVATARS.md)），在名册卡片上按素材原尺寸显示。
+- 每位专家有一张**专属头像**（279 张 AI 生成、项目自有的贴纸风格 SVG，规格与清单见 [`docs/AVATARS.md`](docs/AVATARS.md)），在名册卡片上按素材原尺寸显示。
+  **素材本身不进 git 仓库**，只保留在本地：`assets/avatar/` 与由它生成的 `src/client/avatars.ts` 都在 `.gitignore` 里。干净检出没有它们，构建照常通过，所有卡片回退显示 emoji。
 - 专家**名称与简介固定中文**，不随提示词语言变化。
 - 召唤专家时，persona 正文默认用**英文原文**（上游权威版本），需要时切中文。
 
@@ -34,7 +35,7 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 |---|---|---|
 | 英文 persona（`assets/en/`） | [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents)，逐字节同步，不改写 | MIT |
 | 中文档案（`assets/zh/`） | 本项目撰写，基于英文的演绎作品 | 随附上游 MIT 原文 |
-| 专家头像（`assets/avatar/`） | 本项目，AI 生成后经人工筛选与校验，未使用任何第三方图标集 | Apache-2.0 |
+| 专家头像（`assets/avatar/`） | 本项目，AI 生成后经人工筛选与校验，未使用任何第三方图标集。**素材不进 git 仓库，只保留在本地**；构建时内联进客户端产物 | Apache-2.0 |
 | 源码、构建脚本、文档 | 本项目 | Apache-2.0 |
 
 英文一变，对应中文即按源文件哈希标记为过期：**带正文的过期是发布门禁的硬失败**（旧中文人设配新英文指令会误导被召唤的专家），**只有简介的过期只是告警**。见 [`docs/PLAN.md`](docs/PLAN.md) 第 3 节。

@@ -303,16 +303,19 @@ describe_expert(上线就绪度评审专家)
 
 | 东西 | 作用 |
 |---|---|
-| `assets/avatar/*.svg` | **源**：279 个素材，新目录，绝不碰 `assets/en/` |
-| `scripts/avatars-inline.mjs` | 生成 `src/client/avatars.ts`（slug → `data:image/svg+xml,…`） |
-| `pnpm avatars:inline` | 重新生成 |
+| `assets/avatar/*.svg` | **源**：279 个素材，**不进 git，只留本地** |
+| `scripts/avatars-inline.mjs` | 生成 `src/client/avatars.ts`（slug → `data:image/svg+xml,…`）。**没有素材树时写出空模块** |
+| `pnpm avatars:inline` | 重新生成（`typecheck` / `test` / `verify` 会各自先跑它） |
 | `pnpm avatars:check <目录>` | 校验一批交付：缺 / 多 / 超限 / viewBox / 禁用元素 |
 | `pnpm avatars` | 重新生成 `docs/AVATARS.md`（规格 + 清单） |
-| `pnpm verify` 三条新门禁 | ① 生成文件与素材树逐字节一致 ② 每张图都能对上名册 ③ 每个专家都有图 |
+| `pnpm verify` 三条门禁 | ① 生成文件与素材树一致（两边都成立）② 每张图都能对上名册 ③ 数量与本地素材树相符 |
 
 **三个关键决定**：
 
-1. **生成文件提交进仓库，不在构建时生成。** 一个必须在 `tsc` 和 vitest 之前就存在的文件，会把构建变成一串"顺序别搞错"的陷阱。提交它，任何入口从干净检出都能直接跑，再用 `verify` 证明它没漂移。**实测过：改一个素材不重新生成 → `失败：src/client/avatars.ts 与 assets/avatar 一致`，exit 1。**
+1. **素材不进 git 仓库。** 用户要求头像只留本地。`assets/avatar/` 与 `src/client/avatars.ts` 都写进 `.gitignore`，从索引移除、磁盘保留。**干净检出没有它们也能构建** —— `pnpm avatars:inline` 在没有素材树时写出一个合法的空模块，所有卡片回退 emoji。**已实测**：移走素材树 + 删掉生成文件后，四道门禁仍然全绿，`verify` 如实报告 `0 / 0`。
+   - 生成文件**必须**存在（`src/client/index.ts` 是静态 import），所以它不能靠"记得先跑一步"：`typecheck` / `test` / `verify` 三个脚本各自先跑生成器，`vitest.config.ts` 还加了 `globalSetup`，让裸 `pnpm exec vitest run` 也能用。
+   - `lib/` 本来就在 `.gitignore` 里，所以**构建产物里内联的头像同样不进仓库** —— 已核对：`git ls-files lib` 为 0。
+   - 发布包也不带素材：`files` 加了 `!assets/avatar`。运行时没有任何东西读那棵树（只有构建脚本读），带上就是 222 KB 死重。
 2. **在生成时就把 SVG 转成 data URI，不在渲染时转。** 卡片只做一次查表。
 3. **`encodeURIComponent` 是必须的，不是洁癖。** 素材用 `#RRGGBB` 上色，**未经转义的 `#` 会开启 URL 片段、把图片从第一个颜色处截断**。测试里有一条专门断言 `src` 里不含裸 `#`。
 
@@ -469,7 +472,7 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 - 改浏览器端 → `src/client/index.ts`（页面与触发器）、`src/client/locales.ts`（词条，zh 为 key 集真源，en 由 `satisfies` 编译期强制一致）
 - 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 **23 条**在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」「滚动条一来自适应布局就跑偏」「data URI 里漏了个 `#` 转义」「引用 source 名与注册名不一致」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰
 - 改资产或术语 → 动 `assets/`、`sync/glossary.json` 后必须跑 `pnpm sync:stamp && pnpm check`
-- **改头像素材** → 动 `assets/avatar/` 之后**必须跑 `pnpm avatars:inline`**，否则 `pnpm verify` 会红（它逐字节比对生成文件与素材树）。**不要手改 `src/client/avatars.ts`** —— 那是生成文件
+- **改头像素材** → 动 `assets/avatar/` 之后跑 `pnpm avatars:inline`（`typecheck` / `test` / `verify` 都会自动先跑，裸 `vitest` 由 `globalSetup` 兜住）。**`src/client/avatars.ts` 是生成文件，且不进 git —— 不要手改，也不要试图提交它**。素材树本身在本机、不在仓库里，**换台机器就没有头像**，这是刻意的
 - 改契约 → 先改 `docs/PLAN.md` 再改代码
 - **UI 布局铁律**（在同一个 8px 上踩了三轮才收敛）：**先问「什么东西的尺寸在变」，而不是「哪个元素在动」**。设置面板的滚动区（`.options`，`overflow-y:auto`）在名册非空时有滚动条、清空时没有，**内容框宽度差 8px**（`--dsh-scrollbar-width: 8px`，实占不是覆盖式）。只要这个宽度会变，**任何占满宽度的东西都会抖** —— 卡片、简介折行、右锚定的按钮，全都会。所以现在的做法是**锁死宽度**，而不是逐个元素去躲：
   ```css

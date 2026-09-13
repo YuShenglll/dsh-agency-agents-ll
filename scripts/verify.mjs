@@ -1,4 +1,5 @@
 // Release gate for dsh-agency-agents-ll. Run with: pnpm verify
+import { existsSync } from 'node:fs'
 import { access, readFile } from 'node:fs/promises'
 
 let failures = 0
@@ -131,22 +132,28 @@ check(
   `清单 ${briefSlugs.length} 条，名册 ${slugs.length} 条；先跑 pnpm avatars`,
 )
 
-// The committed client module is generated from assets/avatar. Regenerating it
-// here is the only way to know the two still agree; a stale copy would ship
-// artwork that no longer matches the tree it claims to come from.
+// The generated client module is ignored by git and lives only where the
+// avatar tree does, so these gates have to hold in both worlds. Regenerating in
+// memory and comparing is what makes that one statement instead of two: with a
+// tree present it proves the module matches, and with none it proves the module
+// is the empty map that a clean checkout produces.
 const { render: renderAvatars } = await import('./avatars-inline.mjs')
 const inlined = await readFile(new URL('../src/client/avatars.ts', import.meta.url), 'utf8')
 check('src/client/avatars.ts 与 assets/avatar 一致', inlined === renderAvatars(), '先跑 pnpm avatars:inline')
 const inlinedSlugs = [...inlined.matchAll(/^ {2}'([a-z0-9-]+)': 'data:image\/svg\+xml,/gm)].map((match) => match[1])
+const strayAvatars = inlinedSlugs.filter((slug) => !slugs.includes(slug))
 check(
   `每张头像都对应名册里的专家（${inlinedSlugs.length} 张）`,
-  inlinedSlugs.length > 0 && inlinedSlugs.every((slug) => slugs.includes(slug)),
-  inlinedSlugs.filter((slug) => !slugs.includes(slug)).slice(0, 5).join(', '),
+  strayAvatars.length === 0,
+  strayAvatars.slice(0, 5).join(', '),
 )
+const expectedAvatars = existsSync(new URL('../assets/avatar', import.meta.url)) ? slugs.length : 0
 check(
-  '每个专家都有头像',
-  slugs.every((slug) => inlinedSlugs.includes(slug)),
-  `${slugs.filter((slug) => !inlinedSlugs.includes(slug)).length} 个专家没有头像，会回退 emoji`,
+  `头像数量与本地素材树相符（${inlinedSlugs.length} / ${expectedAvatars}）`,
+  inlinedSlugs.length === expectedAvatars,
+  expectedAvatars === 0
+    ? '本机没有 assets/avatar，生成的应当是空模块'
+    : `${expectedAvatars - inlinedSlugs.length} 个专家没有头像，会回退 emoji`,
 )
 
 if (failures > 0) {

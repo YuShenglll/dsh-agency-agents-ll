@@ -336,15 +336,21 @@ describe('roster page presentation', () => {
     expect(DICTIONARIES.zh['nav']).toBe('专家库')
   })
 
-  it('reserves the scroll gutter on whatever scrolls it', async () => {
+  it('lays the header out from the left so the scrollbar cannot move it', async () => {
     const remote = createRemote(roster())
     await mount(remote)
 
-    // The only rule in the sheet that is not .aall- scoped: the options area
-    // that scrolls this section gains and loses an 8px bar as the roster
-    // empties, and every right-anchored element would move with it.
     const sheet = [...document.head.querySelectorAll('style')].map((tag) => tag.textContent).join('\n')
-    expect(sheet).toContain(':has(> .aall-section){scrollbar-gutter:stable}')
+    const actions = /\.aall-actions\{([^}]*)\}/.exec(sheet)?.[1] ?? ''
+    const text = /\.aall-head-text\{([^}]*)\}/.exec(sheet)?.[1] ?? ''
+    expect(actions, 'the actions rule must exist').not.toBe('')
+    // A right anchor or a growing sibling both track the container width, and
+    // the panel's width moves by the scrollbar's 8px as the roster empties.
+    expect(actions, 'margin-left:auto pins the actions to the right edge').not.toContain('margin-left:auto')
+    expect(text, 'a growing text block pushes the actions right').toContain('flex:0 1 auto')
+    // The host-coupled rule that reached past this sheet is gone, so every
+    // selector is ours again.
+    expect(sheet, 'no rule may reach outside the plugin').not.toContain(':has(')
   })
 
   it('no longer lets a filter field grow with the scrollbar', async () => {

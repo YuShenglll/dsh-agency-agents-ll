@@ -27,6 +27,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 import type { SubagentRun } from '@deepseek-ai/dsh-subagent'
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
@@ -51,7 +52,10 @@ import {
 export const name = 'agency-agents-ll'
 
 /** Services this plugin needs before `apply` runs. */
-export const inject = ['tools', 'subagents', 'settings']
+export const inject = ['tools', 'subagents', 'systemPrompt', 'settings']
+
+/** Prompt-section name, namespaced so it cannot collide with another plugin's. */
+export const ROSTER_PROMPT_SECTION = `${name}:roster`
 
 /** Most experts one `summon_experts` call may start. */
 export const SUMMON_EXPERTS_MAX = 8
@@ -375,6 +379,25 @@ export function apply(ctx: Context, config: Config): void {
         }
       },
     })
+  })
+
+  /**
+   * Tell the model the roster exists — and, just as importantly, when not to use
+   * it.
+   *
+   * Without this section the tools are undiscoverable in practice: four schemas
+   * among dozens give the model no reason to reach for them, so the roster stays a
+   * browser-side feature and only an `@`-mention ever summons anyone. `text` is a
+   * provider rather than a fixed string so the section follows the interface
+   * language at each assembly, like the rest of the host copy.
+   *
+   * Placed at the subagent tool's own order, because that is the neighbouring
+   * subject: what this section says is *when* that tool is allowed to run.
+   */
+  ctx.systemPrompt.section({
+    name: ROSTER_PROMPT_SECTION,
+    order: ctx.systemPrompt.getSectionOrder('TOOL_SUBAGENT'),
+    text: () => formatHost(rosterLocale(), 'systemPrompt.roster'),
   })
 
   let index: Promise<CatalogLoad> | undefined

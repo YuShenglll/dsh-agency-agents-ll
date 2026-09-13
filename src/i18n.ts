@@ -48,6 +48,22 @@ const zh = {
   'profile.introMissing': '（这位专家尚未提供中文简介，名册会回退显示英文一句话简介：{fallback}）',
   'profile.personaProvided': '中文提示词：已提供，切换到中文时使用。',
   'profile.personaMissing': '中文提示词：未提供，召唤时使用英文原文。',
+  // The system-prompt section that makes the roster discoverable. Deliberately
+  // narrow: the owner's decision is that an expert is summoned only when the user
+  // asks for one, so the text has to say when NOT to reach for the tools — not just
+  // that they exist. Summoning is a whole subagent run, so a model that decides on
+  // its own that a task "looks specialist" spends real time and quota unasked.
+  'systemPrompt.roster': [
+    '本会话有一份可召唤的专家名册（279 位专家 / 18 个分区），通过 list_experts / describe_expert / summon_expert / summon_experts 使用。',
+    '',
+    '**只在用户明确要求时使用。** 用户说「叫专家」「用专家看看」「找个专家审一下」，或在输入框里 @ 了某位专家，都算明确要求。',
+    '',
+    '**不要自作主张召唤。**「这个任务看起来属于某个专业领域」不是理由——没有这样的要求时，你自己做完就好。',
+    '',
+    '一次召唤 = 一次完整的子代理运行，要花时间也花额度：只叫真正需要的那几位；纯事实查询、小改动、需要快速来回迭代的事都不要叫。',
+    '',
+    '用户要求评审时，必须给对方留「说没问题」的余地：让它如实报告，没发现问题就直说没发现——为了凑一份完整的评审而编造发现，比报告「没发现问题」更糟。',
+  ].join('\n'),
 } satisfies Record<string, string>
 
 /** Key union of the host dictionary. */
@@ -91,6 +107,17 @@ const en = {
   'profile.introMissing': '(No Chinese introduction yet; the roster falls back to the English one-line summary: {fallback})',
   'profile.personaProvided': 'Chinese persona: provided; used when the prompt language is Chinese.',
   'profile.personaMissing': 'Chinese persona: not provided; the summon uses the English original.',
+  'systemPrompt.roster': [
+    'An Agency expert roster is available in this session (279 experts across 18 divisions): list_experts / describe_expert / summon_expert / summon_experts.',
+    '',
+    '**Use it only when the user explicitly asks for an expert.** "Call an expert", "have an expert look at this", "get someone to review it", or an @-mention of an expert all count as an explicit request.',
+    '',
+    '**Do not summon on your own initiative.** "This task looks like it belongs to a specialist domain" is not a reason. Without such a request, just do the work yourself.',
+    '',
+    'One summon is a full subagent run: it costs time and quota. Call only the experts you actually need, and skip it for plain fact lookups, small edits, and anything that needs fast back-and-forth.',
+    '',
+    'When the user does ask for a review, leave room for "no problems found": require an honest report, and treat inventing findings to fill out a review as worse than reporting none.',
+  ].join('\n'),
 } satisfies Record<HostKey, string>
 
 /**

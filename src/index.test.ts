@@ -7,7 +7,7 @@ import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { loadCatalog, normalizeName, parseFrontmatter, resolveExpert } from './catalog.js'
 import { coercePromptLocale, resolvePromptLocale, SETTINGS_NS } from './contract.js'
 import { formatHost, resolveHostLocale } from './i18n.js'
-import { apply, Config, mapPool, resolveAssetRoots, validateSummonSpecs } from './index.js'
+import { apply, Config, mapPool, resolveAssetRoots, ROSTER_PROMPT_SECTION, validateSummonSpecs } from './index.js'
 import { loadPersona, sanitizePersona } from './persona.js'
 
 describe('prompt locale preference', () => {
@@ -314,6 +314,13 @@ function textOf(block: { type: string; text?: string }): string {
   return block.type === 'text' ? (block.text ?? '') : ''
 }
 
+/** One prompt section the plugin contributed while mounting. */
+interface PromptSectionRecord {
+  readonly name: string
+  readonly order: number
+  readonly text: string | ((context: unknown) => string)
+}
+
 /** What one mounted Host half offers a test. */
 interface HostHarness {
   /** Registered tools by name. */
@@ -322,6 +329,8 @@ interface HostHarness {
   readonly starts: Array<{ readonly label: string; readonly persona: string }>
   /** One entry per warning the plugin logged while mounting. */
   readonly warnings: string[]
+  /** One entry per system-prompt section the plugin contributed. */
+  readonly sections: PromptSectionRecord[]
   /**
    * Run one registered tool.
    * @param name - tool name.
@@ -413,10 +422,18 @@ function mountHost(options: {
     },
   }
 
+  const sections: PromptSectionRecord[] = []
+
   const ctx = {
     tools: { register: (definition: ToolDefinition) => { tools.set(definition.name, definition); return () => {} } },
     subagents,
     settings,
+    // The section text stays a provider so it can follow the interface language;
+    // the test calls it the way an assembly would.
+    systemPrompt: {
+      section: (section: PromptSectionRecord) => { sections.push(section); return () => {} },
+      getSectionOrder: (order: string) => (order === 'TOOL_SUBAGENT' ? 2800 : 0),
+    },
     logger: { warn: (message: unknown) => { warnings.push(String(message)) } },
     provide: (key: string, value: unknown) => { services.set(key, value) },
     // `apply` reaches the settings provider only through this callback.
@@ -445,6 +462,7 @@ function mountHost(options: {
     tools,
     starts,
     warnings,
+    sections,
     call: (name, args, signal = new AbortController().signal) => tool(name).execute(args, exec(signal)),
     text: async (name, args) => {
       const definition = tool(name)
@@ -605,5 +623,34 @@ describe('host tools over the merged roster', () => {
     const listed = await host.text('list_experts', {})
     expect(listed).toContain('前端开发工程师')
     expect(listed).not.toContain('我的专家')
+  })
+
+  it('tells the model the roster exists, and that only the user may invoke it', () => {
+    const host = mountHost({ root, promptLocale: 'zh' })
+    const section = host.sections.find((entry) => entry.name === ROSTER_PROMPT_SECTION)
+    expect(section).toBeDefined()
+    // Filed against the subagent tool: the subject is when that tool may run.
+    expect(section?.order).toBe(2800)
+
+    const text = typeof section?.text === 'function' ? section.text({}) : String(section?.text ?? '')
+    // Discoverability — without this the four schemas sit among dozens unused.
+    expect(text).toContain('list_experts')
+    expect(text).toContain('summon_experts')
+    // The owner's rule, and why it has to be stated: one summon is a whole
+    // subagent run, so "this looks like a specialist domain" is not a licence.
+    expect(text).toContain('只在用户明确要求时使用')
+    expect(text).toContain('不要自作主张召唤')
+    // A review must be allowed to come back empty.
+    expect(text).toContain('编造发现')
+  })
+
+  it('renders the roster section in the interface language, not a fixed one', () => {
+    const rendered = (locale: string): string => {
+      const host = mountHost({ root, promptLocale: 'zh', locale })
+      const found = host.sections.find((entry) => entry.name === ROSTER_PROMPT_SECTION)
+      return typeof found?.text === 'function' ? found.text({}) : String(found?.text ?? '')
+    }
+    expect(rendered('zh')).toContain('只在用户明确要求时使用')
+    expect(rendered('en')).toContain('only when the user explicitly asks for an expert')
   })
 })

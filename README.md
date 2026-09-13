@@ -40,7 +40,7 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 英文一变，对应中文即按源文件哈希标记为过期：**带正文的过期是发布门禁的硬失败**（旧中文人设配新英文指令会误导被召唤的专家），**只有简介的过期只是告警**。见 [`docs/PLAN.md`](docs/PLAN.md) 第 3 节。
 
-上游新增专家时怎么跟上：**`pnpm sync:upstream`** 一条命令拉取、同步、列出还需要人工补写什么，再跑门禁。**想知道有没有更新**用 `pnpm upstream:check`（秒级、不写盘），或者什么都不做——仓库里的 `upstream-watch` 工作流每天自动查一次，名册变了会开 issue 通知你。完整流程与已知限制见 [`docs/UPDATE.md`](docs/UPDATE.md)。
+上游新增专家时怎么跟上：**`pnpm sync:upstream`** 一条命令拉取、同步、列出还需要人工补写什么，再跑门禁。**想知道有没有更新**用 `pnpm upstream:check`（秒级、不写盘），或者什么都不做——仓库里的 `upstream-watch` 工作流每天自动查一次，名册变了会开 issue 通知你。三种用法的完整说明见 [`docs/USAGE.md`](docs/USAGE.md)，完整流程与已知限制见 [`docs/UPDATE.md`](docs/UPDATE.md)。
 
 ## 机械质量门禁
 

@@ -615,7 +615,11 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 - **Windows PowerShell 5.1 会把无 BOM 的 UTF-8 `.ps1` 按 ANSI 解码而乱码。** 含中文字面量的脚本必须先转成带 BOM 再执行（`run-all.ps1` 是现成范例）。
 - **不要用 `pwsh` 内联 `pnpm exec node -e "…"` 跑含正则或引号的脚本** —— PowerShell 会把它解析坏；写成 `%TEMP%` 下的临时 `.mjs` 再执行。
 - `dsh` 与 `pnpm` 的 shim 路径里含随版本变化的 `<hash>`，**脚本中不要硬编码**，用 `Get-Command` 解析。
-- 当前没有任何 node/临时脚本残留；`%TEMP%` 里的辅助脚本与本仓库无关。
+- **工作区 `G:\dsh` 的现状**（2026-09-13 清理过，释放 187.7 MB）：只剩五项 —— 本仓库 `dsh-agency-agents-ll`、英文上游 checkout `agency-agents`、头像素材 `图标`、备份 `备用`、用户自写的 DSH 技能 `task-continuity`。
+  **`agency-agents` 不能删**：`sync/sync.mjs`、`sync/authoring.mjs`、`sync/checks.mjs` 三处都硬编码了它作为默认上游。删了不会立刻坏（`sync.mjs` 会退化成浅克隆到 `sync/.cache/`），但会让每次同步都依赖网络。
+  清理掉的是：第一轮被推翻的映射工程 `agency-mapping`、已弃用的中文上游 `agency-agents-zh`、参考实现 `dsh-agency-agents`、DSH 源码克隆 `deepseek-harness`、Git 安装包 `downloads`、上一轮的一次性网络探针 `gh-stability.mjs` / `.log` 与 DSH 的 `debug.log`。
+  前四个都是**干净克隆、可重建**（动手前逐个量过：无未提交、无本地提交、无 stash），不是丢数据。
+- `%TEMP%` 里可能有本轮会话留下的辅助脚本（`aall-*`），与本仓库无关，删掉不影响任何东西。
 
 ## 7. 常用命令
 

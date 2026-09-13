@@ -131,13 +131,22 @@ dsh-agency-agents-ll/
 │  └─ zh/LICENSE          上游 MIT 原文
 ├─ src/
 │  ├─ contract.ts         两端共享常量与纯函数（不得引入 Host 依赖）
-│  ├─ names.ts            18 个分区的中英显示名
+│  ├─ names.ts            18 个分区的中英显示名（分区名的唯一真源）
 │  ├─ i18n.ts             Host 文案（zh 为 key 集真相源，en 用 satisfies 校验）
 │  ├─ catalog.ts          扫描两棵树、解析 frontmatter、名称解析
 │  ├─ persona.ts          按语言读取 persona 正文并回退
-│  ├─ index.ts            Host：catalog + 三个工具 + installSection
+│  ├─ index.ts            Host：catalog + 4 个工具 + installSection
 │  ├─ index.test.ts       vitest
-│  └─ client/index.ts     浏览器：settings.section 页面 + conversation.input.left 触发器
+│  ├─ roster-settings.ts  enabled 列表与自定义专家（settings 支撑，revision fencing）
+│  ├─ expert-contract.ts  自定义专家的 zod 契约
+│  ├─ remote.ts           Typert Remote 服务（浏览器读取名册的唯一通道）
+│  ├─ remote-contract.ts  Host/Client 共用的方法描述符表
+│  ├─ remote.test.ts      vitest
+│  └─ client/             浏览器半边
+│     ├─ index.ts         settings.section 页面 + conversation.input.left 触发器
+│     ├─ locales.ts       客户端词条（zh 为 key 集真相源）
+│     ├─ catalog.ts       客户端名册状态
+│     └─ remote.ts        客户端 remote 调用
 ├─ cordis.patch.yml
 ├─ tsdown.config.ts
 ├─ scripts/verify.mjs
@@ -168,8 +177,10 @@ dsh-agency-agents-ll/
 | **P1 数据管线** | `sync.mjs` + `checks.mjs` + `glossary.json` + manifest | 已完成：manifest 覆盖 279；英文侧 279/279 逐字节对齐上游；连跑三次幂等 |
 | **P2 中文档案** | 279 份中文名 + 一句话简介 + **中文简介** | 已完成：279/279 `aligned`，0 suspect，0 missing；6 份另带完整中文正文 |
 | **P3 Host 功能** | catalog、4 个工具（`list_experts` / `describe_expert` / `summon_expert` / `summon_experts`）、语言解析 | 已完成：24 项 vitest 覆盖语言解析、名册合并、简介读取、名称解析、persona 回退与请求校验 |
-| **P4 客户端** | 名册页、启用停用、简介展示、提示词查看复制、自定义专家编辑器、`@` 触发 | Playwright 冒烟 + 双语词条 key 对齐 |
-| **P5 发布** | verify 门禁扩充、双语 README、tag | `pnpm verify` + `pnpm check` 通过 |
+| **P4 客户端** | 名册页、启用停用、简介展示、提示词查看复制、自定义专家编辑器、`@` 触发、Host Remote 服务 | 已完成：`--dump-config` 见主行与 remote 行；30 项 verify 通过；用户在浏览器验收 |
+| **P5 发布** | 双语 README、tag | 只差打 tag |
+
+各阶段的实测证据、尚未验证的路径与续工方式见 **[`STATUS.md`](STATUS.md)**。
 
 ## 10. 环境
 
@@ -186,7 +197,7 @@ C:\Users\LL\AppData\Roaming\DSH Desktop\runtime-commands\generations\<hash>\bin\
 
 | 风险 | 处置 |
 |---|---|
-| 279 份中文全部自产，工作量大 | 分批推进；机械门禁先把范围收敛到 `suspect` 堆 |
-| 中文与英文内容不对等（漏译/臆造） | 第 6 节的段落对齐与长度比检查，机器可查 |
-| 上游演进导致中英脱节 | `sourceSha256` 新鲜度跟踪，`stale` 即 CI 失败 |
-| 客户端 UI 工作量大 | P4 独立成阶段，P0–P3 不阻塞 |
+| 中文与英文内容不对等（漏译/臆造） | 第 6 节的段落对齐与长度比检查，机器可查；简介另过字数与必填校验 |
+| 上游演进导致中英脱节 | `sourceSha256` 新鲜度跟踪：带正文的过期是硬失败，仅简介的过期是告警 |
+| 客户端 600KB 级 UI 工作量大 | 已落地为约 1.3k 行源码 + 245 KB 产物；P4 独立成阶段，未阻塞 P0–P3 |
+| 客户端插件因 `dsh.client.inject` 列错模块而静默不激活 | 门禁强制 inject 的每一项都是 peerDependency；见第 8 节 |

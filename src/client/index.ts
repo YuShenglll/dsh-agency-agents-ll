@@ -320,7 +320,16 @@ const CSS = `
 .aall-link:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .aall-link:disabled{opacity:.5;cursor:default}
 .aall-modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.56)}
-.aall-dialog{display:flex;flex-direction:column;box-sizing:border-box;width:min(760px,100%);max-height:min(720px,100%);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-2));box-shadow:var(--dsw-shadow-lv3)}
+/* Dialogs take the opaque secondary layer - the same surface the harness's own
+   Modal uses (--dsw-alias-bg-layer-2 plus the prominent elevation). They must
+   NOT borrow --dsw-specific-menu: that is the *menu material* fill, deliberately
+   translucent off macOS (#f8f9fa94 light / #43454a73 dark) because a menu paints
+   backdrop-filter: var(--dsw-menu-backdrop-filter) over it. On macOS the same
+   token resolves to an almost-opaque #f8f9faf0, which is why the translucency
+   only ever showed up on Windows. A dialog with no filter of its own just lets
+   the page through, and the prompt body - 12px monospace - is where that hurts
+   most. */
+.aall-dialog{display:flex;flex-direction:column;box-sizing:border-box;width:min(760px,100%);max-height:min(720px,100%);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3)}
 .aall-dialog-narrow{width:min(520px,100%)}
 .aall-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .aall-dialog-title{margin:0;font-size:15px;line-height:22px}
@@ -332,7 +341,11 @@ const CSS = `
 .aall-check{display:inline-flex;align-items:center;gap:8px;font-size:13px}
 .aall-check-control{min-height:34px;color:var(--dsw-alias-label-secondary);font-size:13px;cursor:pointer}
 .aall-btn-wrap{position:relative;display:inline-flex;flex:0 0 auto}
-.aall-menu{position:absolute;bottom:calc(100% + 6px);left:0;z-index:10000;box-sizing:border-box;display:flex;flex-direction:column;width:280px;max-height:min(420px,60vh);overflow:auto;padding:4px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-2));box-shadow:var(--dsw-shadow-lv3)}
+/* The composer menu IS a menu, so it keeps the menu fill - but it has to take
+   the material's blur along with it. The fill is 58% alpha in the light theme
+   and 45% in the dark one; without a backdrop-filter the transcript behind the
+   open menu reads straight through it. */
+.aall-menu{position:absolute;bottom:calc(100% + 6px);left:0;z-index:10000;box-sizing:border-box;display:flex;flex-direction:column;width:280px;max-height:min(420px,60vh);overflow:auto;padding:4px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-specific-menu,var(--dsw-alias-bg-layer-2));backdrop-filter:var(--dsw-menu-backdrop-filter);box-shadow:var(--dsw-shadow-lv3)}
 .aall-menu-group{padding:6px 10px 2px;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
 .aall-menu-item{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}
 .aall-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}

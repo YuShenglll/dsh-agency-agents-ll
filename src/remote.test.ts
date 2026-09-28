@@ -31,8 +31,7 @@ interface FakeSettings {
   promptLocale: 'auto' | 'zh' | 'en'
   localePreference: string
   revision: number
-  get(ns: string): unknown
-  describe(): Array<{ ns: string; revision: number }>
+  describe(): Array<{ ns: string; revision: number; value: unknown }>
   mutate(ns: string, ops: readonly { op: 'set'; path: readonly string[]; value: unknown }[], expectedRevision?: number): Promise<void>
 }
 
@@ -71,13 +70,14 @@ function fakeSettings(): FakeSettings {
     promptLocale: 'en',
     localePreference: 'zh',
     revision: 0,
-    get(ns) {
-      if (ns === 'locale') return { preference: settings.localePreference }
-      if (ns === SETTINGS_NS) return { promptLocale: settings.promptLocale, ...settings.state }
-      return undefined
-    },
     describe() {
-      return [{ ns: SETTINGS_NS, revision: settings.revision }]
+      // The two rows the plugin reads live values from. 0.1.7 projects a
+      // plugin's own Config per entry id, so the fake serves the same shape the
+      // settings service does rather than a `get(namespace)` lookup.
+      return [
+        { ns: 'locale', revision: 0, value: { preference: settings.localePreference } },
+        { ns: SETTINGS_NS, revision: settings.revision, value: { promptLocale: settings.promptLocale, ...settings.state } },
+      ]
     },
     async mutate(ns, ops, expectedRevision) {
       if (ns !== SETTINGS_NS) throw new Error(`unexpected namespace ${ns}`)
@@ -107,7 +107,7 @@ function parseParameter(descriptor: InvocationDescriptor | undefined, index: num
   if (parameter === undefined || parameter.codec.mode !== 'strict') {
     throw new Error('expected a strict parameter codec')
   }
-  return parameter.codec.schema.parse(value)
+  return parameter.codec.create().parse(value)
 }
 
 describe('roster library over a settings store', () => {

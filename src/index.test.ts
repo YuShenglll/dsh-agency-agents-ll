@@ -283,14 +283,32 @@ describe('asset root layout', () => {
 })
 
 describe('settings section shape', () => {
+  /**
+   * Read one resolved config field.
+   *
+   * A `.volatile()` field resolves to a cosmokit reference rather than to its
+   * value, which is exactly why the plugin reads its live settings from the
+   * service's projection instead of from the config.
+   *
+   * @param value - one field of a resolved config.
+   * @returns the value the reference stands for, or the value itself.
+   */
+  function live(value: unknown): unknown {
+    const ref = value as { get?: () => unknown } | undefined
+    return typeof ref?.get === 'function' ? ref.get() : value
+  }
+
   it('accepts a container a hand-edited document got wrong', () => {
-    // Schemastery refusing this value fails the whole namespace registration,
-    // which strands the settings page on "not ready yet" with no way to retry.
-    // The field therefore accepts whatever the document holds; `apply` reads a
-    // non-array as "nothing stored" and the validate hook records the problem.
+    // Schemastery refusing this value fails the whole plugin entry, which takes
+    // the four tools down with it and offers no way to retry. The fields
+    // therefore accept whatever the document holds; the read path degrades a
+    // non-array to "nothing stored" and records the problem.
     const resolved = Config({ promptLocale: 'en', root: '', provider: 'spawn', enabled: [], customExperts: 'oops' })
-    expect(resolved.customExperts).toBe('oops')
-    expect(resolved.enabled).toEqual([])
+    expect(live(resolved.customExperts)).toBe('oops')
+    expect(live(resolved.enabled)).toEqual([])
+    // The ordinary fields are the ones `apply` reads straight off the config.
+    expect(resolved.root).toBe('')
+    expect(resolved.provider).toBe('spawn')
   })
 })
 
@@ -332,6 +350,11 @@ interface HostHarness {
   /** One entry per system-prompt section the plugin contributed. */
   readonly sections: PromptSectionRecord[]
   /**
+   * The fake settings document this mount reads, exposed so a test can edit it
+   * the way a user editing the profile patch would.
+   */
+  readonly stored: { enabled: unknown[]; customExperts: unknown }
+  /**
    * Run one registered tool.
    * @param name - tool name.
    * @param args - tool arguments.
@@ -372,34 +395,26 @@ function mountHost(options: {
   const warnings: string[] = []
   // The stored document, kept apart from the composition base the way the real
   // provider keeps them: the tests exercise the read path over what it holds.
-  const stored: { enabled: string[]; customExperts: unknown } = {
+  const stored: { enabled: unknown[]; customExperts: unknown } = {
     enabled: [],
     customExperts: options.customExperts ?? [],
   }
   let revision = 0
 
   const settings = {
-    get: (ns: string): unknown => {
-      if (ns === 'locale') return { preference: options.locale ?? 'zh' }
-      if (ns === SETTINGS_NS) return { promptLocale: options.promptLocale, ...stored }
-      return undefined
-    },
-    describe: () => [{ ns: SETTINGS_NS, revision }],
+    /**
+     * The rows the real settings service projects. This plugin reads the live
+     * values from here rather than from the Cordis config, because the volatile
+     * fields arrive in the config as cosmokit references; keeping the fake on
+     * the projection is what makes these tests describe the same surface the
+     * browser edits.
+     */
+    describe: () => [
+      { ns: 'locale', revision: 0, value: { preference: options.locale ?? 'zh' } },
+      { ns: SETTINGS_NS, revision, value: { promptLocale: options.promptLocale, ...stored } },
+    ],
     mutate: async () => { revision += 1 },
-    installSection: (
-      _owner: unknown,
-      _ns: string,
-      _schema: unknown,
-      entry: Config,
-      hooks: { setSource: (current: () => Config) => void; validate?: (value: Config) => void },
-    ) => {
-      // The real provider hands the resolved section back and validates it at
-      // registration, where a refusal fails the whole namespace: the fake must
-      // therefore let a `validate` failure through rather than swallow it.
-      const resolved: Config = { ...entry, enabled: stored.enabled, customExperts: stored.customExperts }
-      hooks.setSource(() => resolved)
-      hooks.validate?.(resolved)
-    },
+    configure: () => () => {},
   }
 
   const provider = {
@@ -436,18 +451,15 @@ function mountHost(options: {
     },
     logger: { warn: (message: unknown) => { warnings.push(String(message)) } },
     provide: (key: string, value: unknown) => { services.set(key, value) },
-    // `apply` reaches the settings provider only through this callback.
-    inject: (_names: readonly string[], callback: (scoped: unknown) => void) => { callback({ settings }) },
+    effect: () => async () => {},
+    // `apply` reaches the settings service only through this callback, and
+    // mounts its Remote half as a child plugin.
+    inject: (_names: readonly string[], callback: (scoped: unknown) => void) => { callback(ctx) },
+    plugin: () => () => {},
     get: (key: string) => services.get(key),
   }
 
-  apply(ctx as unknown as Context, {
-    promptLocale: options.promptLocale,
-    root: options.root,
-    provider: 'spawn',
-    enabled: [],
-    customExperts: [],
-  })
+  apply(ctx as unknown as Context, { root: options.root, provider: 'spawn' })
 
   const tool = (name: string): ToolDefinition => {
     const definition = tools.get(name)
@@ -463,6 +475,7 @@ function mountHost(options: {
     starts,
     warnings,
     sections,
+    stored,
     call: (name, args, signal = new AbortController().signal) => tool(name).execute(args, exec(signal)),
     text: async (name, args) => {
       const definition = tool(name)
@@ -604,7 +617,7 @@ describe('host tools over the merged roster', () => {
     expect(await host.text('list_experts', {})).toContain('迟到工程师')
   })
 
-  it('logs what a hand-edited document got wrong instead of refusing the section', () => {
+  it('logs what a hand-edited document got wrong instead of refusing the entry', async () => {
     // A malformed entry costs the user that expert and nothing else — but the
     // reason has to be on the record, or the roster silently loses entries.
     const host = mountHost({
@@ -612,8 +625,25 @@ describe('host tools over the merged roster', () => {
       promptLocale: 'zh',
       customExperts: [{ slug: 'not-a-custom-slug', name: '坏条目' }],
     })
+    // The report rides the first read that finds this plugin's own settings
+    // row: the harness only projects an entry whose fiber is already active,
+    // so there is nothing to inspect while `apply` is still running.
+    expect(host.warnings).toHaveLength(0)
+    await host.text('list_experts', {})
     expect(host.warnings.filter((line) => line.includes('customExperts[0]'))).toHaveLength(1)
     expect(host.warnings[0]).toContain('[agency-agents-ll]')
+    // Once is the contract: a complaint repeated on every toggle is noise.
+    await host.text('list_experts', {})
+    expect(host.warnings.filter((line) => line.includes('customExperts[0]'))).toHaveLength(1)
+  })
+
+  it('records a mark that is not a slug instead of carrying it into the roster', async () => {
+    const host = mountHost({ root, promptLocale: 'zh' })
+    // The stored marks are written by the browser, but the entry is a document
+    // a user can hand-edit — and a mark that is not a string names no expert.
+    host.stored.enabled = ['engineering-frontend', 7]
+    await host.text('list_experts', {})
+    expect(host.warnings.filter((line) => line.startsWith('[agency-agents-ll] enabled:'))).toHaveLength(1)
   })
 
   it('treats a container that is not an array as no custom experts', async () => {

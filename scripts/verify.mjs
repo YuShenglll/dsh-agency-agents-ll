@@ -67,9 +67,12 @@ check(
 check('发布文件齐全', ['lib', 'assets', 'cordis.patch.yml', 'README.md', 'NOTICE', 'LICENSE']
   .every((entry) => packageJson.files?.includes(entry)))
 check('导出 Host 与客户端入口', packageJson.exports?.['.'] !== undefined && packageJson.exports?.['./client'] !== undefined)
-check('导出 Remote 入口', packageJson.exports?.['./remote'] !== undefined && packageJson.exports?.['./remote']?.default === './lib/remote.js')
+// 0.1.7 keys the browser module table by package and refuses two active Loader
+// rows resolving to the same one, so the Remote service is mounted by the Host
+// half instead of shipping a second mountable entry.
+check('不导出可单独挂载的 Remote 行', packageJson.exports?.['./remote'] === undefined)
 
-for (const file of ['../lib/index.js', '../lib/client.js', '../lib/remote.js', '../cordis.patch.yml', '../LICENSE', '../NOTICE']) {
+for (const file of ['../lib/index.js', '../lib/client.js', '../cordis.patch.yml', '../LICENSE', '../NOTICE']) {
   try {
     await access(new URL(file, import.meta.url))
     check(`发布文件存在：${file.slice(3)}`, true)
@@ -103,6 +106,7 @@ try {
   warn('无法比较 src/ 与 lib/ 的时间戳', error instanceof Error ? error.message : String(error))
 }
 
+const hostBundle = await readFile(new URL('../lib/index.js', import.meta.url), 'utf8')
 const clientBundle = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 check(
   '客户端产物带 ModuleLoader 工厂包装',
@@ -110,12 +114,14 @@ check(
 )
 check('客户端产物不引用 Node url 模块', !clientBundle.includes('require("url")') && !clientBundle.includes("require('url')"))
 // The platform-frozen table must stay external, otherwise the browser gets a
-// second React/cordis instance instead of the host's.
+// second React/cordis instance instead of the host's. This is the web shell's
+// `staticModules` seed table verbatim: a name the shell does not seed would miss
+// the module table at require time, and a seeded name left out here would be
+// inlined as a duplicate copy.
 const PLATFORM_MODULES = [
-  'react', 'react-dom', 'react/jsx-runtime', 'react-dom/client', '@deepseek-ai/cordis',
-  '@deepseek-ai/dsh-client-ui-slots', '@deepseek-ai/dsh-client-web-react',
-  '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-ui-attachment',
-  '@deepseek-ai/dsh-client-schema-form',
+  'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
+  '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-slots',
+  '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-ui-dockkit',
 ]
 const bundleRequires = [...clientBundle.matchAll(/require\((["'])([^"']+)\1\)/g)].map((match) => match[2])
 check(
@@ -135,19 +141,31 @@ check(
 
 const patch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
 check('Cordis patch 挂载当前包名', patch.includes(`name: ${packageJson.name}`))
-// The Remote half is its own top-level row: the gateway discovers Remote routes
-// from the root service table, so a service provided inside another plugin's
-// fiber would never be routable from the browser.
-check('Cordis patch 挂载 Remote 行', patch.includes(`name: ${packageJson.name}/remote`))
+// One row per package, and it is the only row: two active rows for the same
+// package make the browser module registry reject the package outright, which
+// costs the whole browser half rather than one of the two rows.
+const patchRows = [...patch.matchAll(/^\s*name:\s*(\S+)\s*$/gmu)].map((match) => match[1])
+check(
+  'Cordis patch 只挂载一行且是本包',
+  patchRows.length === 1 && patchRows[0] === packageJson.name,
+  patchRows.join(', '),
+)
 
 const plugin = await import(new URL('../lib/index.js', import.meta.url).href)
 check('编译入口导出 DSH 插件约定', ['name', 'Config', 'apply'].every((key) => key in plugin))
+check('Host 半边自己挂载 Remote 服务', /ctx\.plugin\(\s*AgencyAgentsRemote\s*\)/u.test(hostBundle))
 
-const remoteEntry = await import(new URL('../lib/remote.js', import.meta.url).href)
-check('Remote 入口导出 Typert 服务类', typeof remoteEntry.default === 'function')
+// 0.1.7 turned the strict codec from `schema` into a `create()` factory and
+// validates it by that field; a codec without one is rejected while the gateway
+// is registering the invocation, which takes every endpoint down with it.
+const descriptors = plugin.AGENCY_AGENTS_DESCRIPTORS
+check('编译产物导出两端共用的描述符表', Array.isArray(descriptors) && descriptors.length === 8, String(descriptors?.length))
 check(
-  'Remote 入口导出与客户端共用的描述符表',
-  Array.isArray(remoteEntry.AGENCY_AGENTS_DESCRIPTORS) && remoteEntry.AGENCY_AGENTS_DESCRIPTORS.length > 0,
+  '每个 strict codec 都带 create() 工厂',
+  Array.isArray(descriptors) && descriptors.every((descriptor) => (
+    typeof descriptor.result?.create === 'function'
+    && descriptor.parameters.every((parameter) => typeof parameter.codec?.create === 'function')
+  )),
 )
 
 const { resolvePromptLocale, coercePromptLocale } = await import(new URL('../lib/contract.js', import.meta.url).href)

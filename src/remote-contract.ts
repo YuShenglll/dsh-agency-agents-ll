@@ -26,12 +26,20 @@ export const TYPERT_NAMESPACE = 'agencyAgents'
 
 /**
  * Build one strict codec.
+ *
+ * 0.1.7 validates a strict codec by its `create()` factory rather than by a
+ * `schema` field: the gateway calls `create()` at each boundary and parses the
+ * wire value with what comes back, so the factory is the only way a strict
+ * codec can produce a validator. The factory is memoized for the same reason
+ * the harness memoizes generated ones — the schema is stateless once built, and
+ * a boundary is crossed on every call.
+ *
  * @param typeSymbol - canonical type name carried for diagnostics.
  * @param schema - boundary validator.
  * @returns the codec descriptor.
  */
 function strict(typeSymbol: string, schema: z.ZodType): TypertCodec {
-  return { mode: 'strict', typeSymbol, schema }
+  return { mode: 'strict', typeSymbol, create: () => schema }
 }
 
 /**

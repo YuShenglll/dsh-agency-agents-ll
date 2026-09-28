@@ -1,9 +1,13 @@
 /**
  * Host-side Remote service: the browser's only way into the roster.
  *
- * The plugin is its own top-level row in `cordis.patch.yml` (separate from the
- * tool half) because the gateway discovers Remote routes from the root service
- * table; a service provided inside another plugin's fiber is not visible there.
+ * This service is mounted by the Host half (`src/index.ts`) as a child plugin
+ * rather than as a Loader row of its own. Under 0.1.7 a package may hold only
+ * one active row: the client module system keys its bundle table by package and
+ * refuses two rows resolving to the same one. The Gateway still reaches the
+ * service — Cordis registers a service in the root store, which any fiber
+ * reads — and the typert contribution registered below is what carries the
+ * strict descriptors it dispatches on.
  *
  * Every mutating method takes the settings revision the caller read, so two
  * windows editing the same roster cannot silently overwrite each other.
@@ -15,10 +19,11 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry'
-import { coercePromptLocale, LOCALE_NS, resolvePromptLocale, SETTINGS_NS, type PromptLocale } from './contract.js'
+import { resolvePromptLocale, type PromptLocale } from './contract.js'
 import type { CatalogSnapshot, CustomExpertInput, EnabledState, ExpertPrompt, PromptLocaleState } from './expert-contract.js'
 import { customError } from './expert-contract.js'
-import { formatHost, resolveHostLocale, type LocaleId } from './i18n.js'
+import { readHostLocale, readPromptLocale } from './host-settings.js'
+import { formatHost, type LocaleId } from './i18n.js'
 import { AGENCY_AGENTS_DESCRIPTORS, TYPERT_NAMESPACE, TYPERT_PACKAGE } from './remote-contract.js'
 import { AGENCY_LIBRARY_SERVICE, AGENCY_PERSONA_SERVICE, type AgencyPersonaSource, type RosterLibrary } from './roster-settings.js'
 
@@ -60,18 +65,12 @@ export default class AgencyAgentsRemote extends TypertRemoteService {
 
   /** Language the roster text renders in. */
   private rosterLocale(): LocaleId {
-    try {
-      const section = this.ctx.settings.get(LOCALE_NS) as { preference?: unknown } | undefined
-      return resolveHostLocale(section?.preference)
-    } catch {
-      return 'zh'
-    }
+    return readHostLocale(this.ctx)
   }
 
   /** Stored persona-language preference. */
   private preference(): PromptLocale {
-    const section = this.ctx.settings.get(SETTINGS_NS) as { promptLocale?: unknown } | undefined
-    return coercePromptLocale(section?.promptLocale)
+    return readPromptLocale(this.ctx)
   }
 
   /** Language a persona body loads in. */

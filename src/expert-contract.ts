@@ -233,6 +233,13 @@ export function normalizeExpertName(value: string): string {
 export function validateRosterSettings(value: { enabled?: unknown; customExperts?: unknown }, locale: 'zh' | 'en' = 'zh'): readonly string[] {
   const raw = value.customExperts ?? []
   const problems: string[] = []
+  const rawEnabled = value.enabled
+  // A mark names an expert by slug, so a container that is not a list of
+  // strings cannot be read as one. The read path drops what it cannot use; this
+  // is the record that keeps the drop from being silent.
+  if (rawEnabled !== undefined && (!Array.isArray(rawEnabled) || rawEnabled.some((entry) => typeof entry !== 'string'))) {
+    problems.push(`enabled: ${customError('invalid', locale).message}`)
+  }
   if (!Array.isArray(raw)) {
     problems.push(customError('invalid', locale).message)
     return problems

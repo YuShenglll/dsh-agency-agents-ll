@@ -812,10 +812,18 @@ function CustomEditor(props: EditorProps): React.ReactElement {
 // Settings page.
 // ---------------------------------------------------------------------------
 
-/** One bound settings namespace, as the settings base service hands it out. */
+/**
+ * One bound settings namespace, as the browser settings base hands it out.
+ *
+ * Deliberately structural rather than the package's `ConfigForm`: the component
+ * only needs "read the last accepted section" and "write one field", and the
+ * tests stand in a two-method object for it. The return type stays `unknown`
+ * because a Host refusal is reported as `false` while a transport failure
+ * rejects, and the caller only cares that the write settled.
+ */
 interface PromptLocaleScope {
   getSnapshot(): { readonly value?: { readonly promptLocale?: CatalogSnapshot['promptLocale'] } }
-  set(field: string, value: unknown): Promise<void>
+  set(field: string, value: unknown): Promise<unknown>
 }
 
 interface SectionProps extends PropsLocale<'agencyLL'> {
@@ -1275,7 +1283,7 @@ function RosterSection(props: SectionProps): React.ReactElement {
 // Plugin body.
 // ---------------------------------------------------------------------------
 
-export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation', 'settingsScope']
+export const inject = ['slots', 'inputTriggers', 'locale', 'remote', 'sessions', 'conversation', 'configForms']
 
 /**
  * Mount the browser half.
@@ -1295,7 +1303,12 @@ export function apply(ctx: ClientContext): void {
 
   const t = ctx.locale.bind(NS)
   const locale = (): ClientLocale => (ctx.locale.getSnapshot().active === 'en' ? 'en' : 'zh')
-  const promptLocaleScope: PromptLocaleScope = ctx.settingsScope.bind<{ promptLocale?: CatalogSnapshot['promptLocale'] }>({ namespace: SETTINGS_NS })
+  // 0.1.7 hands a plugin's own settings entry out as a form keyed by the Host
+  // row id — the same id the Host half reads its live values from — so the
+  // preference the page writes and the language a summoned persona loads are
+  // one value rather than two views of a document. The page only ever touches
+  // `promptLocale`; the roster itself is written through the Remote service.
+  const promptLocaleScope: PromptLocaleScope = ctx.configForms.get<{ promptLocale?: CatalogSnapshot['promptLocale'] }>(SETTINGS_NS)
 
   let remote: AgencyRosterRemote | undefined
 

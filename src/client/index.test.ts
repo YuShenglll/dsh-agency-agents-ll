@@ -204,8 +204,11 @@ async function mount(remote: FakeRemote): Promise<{
       bind: () => t,
       getSnapshot: () => ({ active: 'zh', revision: 1 }),
     },
-    settingsScope: {
-      bind: () => ({ getSnapshot: () => ({ value: { promptLocale: 'en' as const } }), set: async () => {} }),
+    // 0.1.7 hands a plugin's own settings entry out as a form keyed by the Host
+    // row id. The page only reads the accepted `promptLocale` and writes that
+    // one field; the roster itself goes through the Remote face.
+    configForms: {
+      get: () => ({ getSnapshot: () => ({ value: { promptLocale: 'en' as const } }), set: async () => true }),
     },
     slots: {
       inject: (name: string, callback: () => unknown) => {

@@ -31,16 +31,19 @@ function standardDecoratorPlugin() {
 
 /**
  * Two build faces:
- * - `node`   — the Host half, plain ESM for Node. `remote` is a separate entry
- *   because the profile loads it as its own top-level row so the gateway can
- *   find the Remote routes.
+ * - `node`   — the Host half, plain ESM for Node. `contract` and `names` are
+ *   separate entries because they are the modules both faces share.
  * - `client` — the browser half. The client module system loads a package's
  *   `./client` export as a lazy-CJS factory, so the bundle must carry the
  *   `window.__ModuleLoader__.load({ id, factory })` banner. Platform-frozen
  *   modules stay external; everything else is inlined.
  *
- * The frozen module table mirrors the harness client platform
- * (`packages/client/web/src/platform.ts`).
+ * The frozen module table mirrors the harness client platform seed
+ * (`packages/client/web/src/platform.ts`, observed in the 0.1.7 web shell's
+ * `staticModules` table). It must match exactly: a module the shell does not
+ * seed but this list freezes would miss the browser module table at require
+ * time, and a seeded module this list omits would be inlined as a second copy
+ * of something the shell already owns.
  */
 const PLATFORM_MODULES = [
   'react',
@@ -48,18 +51,17 @@ const PLATFORM_MODULES = [
   'react-dom',
   'react-dom/client',
   '@deepseek-ai/cordis',
+  '@deepseek-ai/dsh-client-store',
   '@deepseek-ai/dsh-client-ui-slots',
-  '@deepseek-ai/dsh-client-web-react',
   '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-ui-attachment',
-  '@deepseek-ai/dsh-client-schema-form',
+  '@deepseek-ai/dsh-client-ui-dockkit',
 ] as const
 
 const ID = 'dsh-agency-agents-ll'
 
 const node: UserConfig = {
   name: ID,
-  entry: { index: 'src/index.ts', contract: 'src/contract.ts', names: 'src/names.ts', remote: 'src/remote.ts' },
+  entry: { index: 'src/index.ts', contract: 'src/contract.ts', names: 'src/names.ts' },
   outDir: 'lib',
   format: ['esm'],
   platform: 'node',

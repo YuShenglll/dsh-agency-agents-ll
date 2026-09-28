@@ -1,15 +1,25 @@
 # Read and merged into the target profile by `dsh plugin add`.
+#
+# ONE row, deliberately. DSH 0.1.7 keys the browser module table by package and
+# refuses two active Loader rows that resolve to the same one ("package
+# ... resolves from multiple active Loader sources ... remove one entry"), so a
+# package that ships both a Host half and a browser half may not also split its
+# Host half in two. The Remote service and the typert descriptors it carries are
+# started by the plugin itself (`src/index.ts` mounts `src/remote.ts` as a child
+# plugin); Cordis registers services in the root store, which is what lets the
+# API gateway resolve them from its own fiber.
+#
 # Expert assets ship inside the package; override config.root (or set
 # AGENCY_AGENTS_ROOT) only when you want to point the roster at an external
 # checkout. That directory must contain both trees, `en/` and `zh/`, laid out like
 # the package's own `assets/en` + `assets/zh` — one file carries one `name:`, so a
 # single tree cannot serve as both halves.
 #
-# The Remote half is its own top-level row: the gateway discovers Remote routes
-# from the root service table, so a service provided inside another plugin's
-# fiber would not be routable from the browser.
+# The three fields the roster page writes — `promptLocale`, `enabled` and
+# `customExperts` — are `.volatile()` in the plugin's Config, so the settings
+# page edits the running plugin in place. `root` and `provider` are ordinary
+# config: changing either reloads the entry, which is what re-reading the roster
+# requires anyway.
 - insert:
-    - id: agency-agents-ll-remote
-      name: dsh-agency-agents-ll/remote
     - id: agency-agents-ll
       name: dsh-agency-agents-ll

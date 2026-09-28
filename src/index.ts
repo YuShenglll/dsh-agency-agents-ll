@@ -33,12 +33,14 @@ import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import z from '@deepseek-ai/schemastery'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { coercePromptLocale, DEFAULT_PROMPT_LOCALE, LOCALE_NS, PROMPT_LOCALES, resolvePromptLocale, SETTINGS_NS, type PromptLocale } from './contract.js'
+import { DEFAULT_PROMPT_LOCALE, PROMPT_LOCALES, resolvePromptLocale, SETTINGS_NS, type PromptLocale } from './contract.js'
 import { assetStamp, loadCatalog, resolveExpert, type AssetRoots, type CatalogLoad, type Expert } from './catalog.js'
 import { validateRosterSettings, type ExpertSummary } from './expert-contract.js'
-import { formatHost, resolveHostLocale, type LocaleId } from './i18n.js'
+import { readHostLocale, readPromptLocale, readRosterSettings, rosterRevision } from './host-settings.js'
+import { formatHost, type LocaleId } from './i18n.js'
 import { DIVISIONS, EN_DIVISION, ZH_DIVISION } from './names.js'
 import { loadPersona, sanitizePersona } from './persona.js'
+import AgencyAgentsRemote from './remote.js'
 import {
   AGENCY_LIBRARY_SERVICE,
   AGENCY_PERSONA_SERVICE,
@@ -57,6 +59,14 @@ export const inject = ['tools', 'subagents', 'systemPrompt', 'settings']
 /** Prompt-section name, namespaced so it cannot collide with another plugin's. */
 export const ROSTER_PROMPT_SECTION = `${name}:roster`
 
+/**
+ * The Remote descriptor table, re-exported so the published Host artifact
+ * carries the contract the browser mounts. Both halves are built from one copy
+ * of `src/remote-contract.ts`; exporting it here is what lets the release gate
+ * check that copy rather than a reconstruction of it.
+ */
+export { AGENCY_AGENTS_DESCRIPTORS } from './remote-contract.js'
+
 /** Most experts one `summon_experts` call may start. */
 export const SUMMON_EXPERTS_MAX = 8
 
@@ -69,6 +79,15 @@ export const SUMMON_TASK_MAX_CHARS = 8000
 /** Longest expert description echoed by `list_experts`, in code points. */
 const DESCRIPTION_LIMIT = 160
 
+/**
+ * The plugin's configuration as a value, with every field unwrapped.
+ *
+ * Nothing hands an object of this shape to the Host: Cordis resolves the schema
+ * below, where the `.volatile()` fields come out as cosmokit references, and
+ * the live values are read through the settings projection
+ * ({@link readRosterSettings}). This interface is the shape the roster logic
+ * reasons about, and the one the tests mount with.
+ */
 export interface Config {
   /** Language the summoned expert persona is written in. */
   readonly promptLocale: PromptLocale
@@ -91,40 +110,56 @@ export interface Config {
    * Experts the user authored; written by the browser custom-expert editor.
    *
    * Typed as `unknown` on purpose: the document this is read from is
-   * hand-editable, so the container can be anything, and only `apply`'s
+   * hand-editable, so the container can be anything, and only the read path's
    * normalization gives it a usable shape.
    */
   readonly customExperts: unknown
 }
 
-export const Config: z<Config> = z.object({
-  promptLocale: z.union([...PROMPT_LOCALES]).default(DEFAULT_PROMPT_LOCALE),
-  root: z.string().default(''),
-  provider: z.string().default('spawn'),
-  enabled: z.array(z.string()).default([]),
-  // Anything goes, including a container that is not an array: the section is
-  // read from a document a user can hand-edit, and a schema that refuses it
-  // here fails the whole namespace registration — which strands the settings
-  // page on "not ready yet" with no way to retry. `apply` normalizes instead,
-  // and `validateRosterSettings` reports what was wrong.
-  customExperts: z.any().default([]),
-})
+/**
+ * The ordinary half of the resolved config, which `apply` reads directly.
+ *
+ * Deliberately not the whole config: the volatile fields arrive here as
+ * cosmokit references, so naming them would invite a second unwrapping rule
+ * beside the settings projection's. The live values come from
+ * `host-settings.ts` instead, and the two halves cannot then disagree about
+ * what is stored.
+ */
+export interface MountConfig {
+  /** External roster root; empty means "use the bundled assets". */
+  readonly root: string
+  /** Subagent provider used to run an expert. */
+  readonly provider: string
+}
 
 /**
- * Read the DSH interface language. A plugin can be loaded before the locale
- * namespace registers, so an unavailable section reads as Chinese — the same
- * default the Host copy uses everywhere else.
- * @param ctx - context carrying the settings service.
- * @returns the interface language.
+ * Cordis plugin configuration; also the settings form the browser edits.
+ *
+ * DSH 0.1.7 derives a plugin's settings entry from this schema instead of
+ * letting a plugin register a namespace of its own. Three fields are marked
+ * `.volatile()` — the ones the roster page writes while the Host keeps
+ * running — because a volatile edit is committed into the running config
+ * rather than remounting the plugin. `root` and `provider` stay ordinary: they
+ * decide what the plugin reads at load, so changing them has to reload it.
+ *
+ * `enabled` and `customExperts` are deliberately `any` on the wire. Under
+ * 0.1.7 a value the Config schema refuses no longer costs just the settings
+ * page — it fails the whole entry, taking the four tools with it. Both fields
+ * are hand-editable, so the schema admits whatever the document holds and the
+ * readers normalize it, which is the same split `customExperts` already had.
  */
-function readLocalePreference(ctx: Context): LocaleId {
-  try {
-    const section = ctx.settings?.get?.(LOCALE_NS) as { preference?: unknown } | undefined
-    return resolveHostLocale(section?.preference)
-  } catch {
-    return 'zh'
-  }
-}
+export const Config = z.object({
+  promptLocale: z.union([...PROMPT_LOCALES]).default(DEFAULT_PROMPT_LOCALE).volatile(),
+  root: z.string().default(''),
+  provider: z.string().default('spawn'),
+  // Anything goes, including a container that is not an array: the entry is
+  // read from a document a user can hand-edit, and a schema that refuses it
+  // here fails the whole entry — which strands the four tools with no way to
+  // retry. The read path normalizes instead, and `validateRosterSettings`
+  // reports what was wrong.
+  enabled: z.any().default([]).volatile(),
+  customExperts: z.any().default([]).volatile(),
+})
 
 const BUNDLED_EN = fileURLToPath(new URL('../assets/en/', import.meta.url))
 const BUNDLED_ZH = fileURLToPath(new URL('../assets/zh/', import.meta.url))
@@ -325,60 +360,55 @@ export function validateSummonSpecs(specs: unknown, locale: LocaleId): SummonSpe
  * @param ctx - Host plugin context.
  * @param config - resolved plugin configuration.
  */
-export function apply(ctx: Context, config: Config): void {
+export function apply(ctx: Context, config: MountConfig): void {
   const roots = resolveAssetRoots(config.root)
-  let source: () => Config = () => config
-  /** Roster state as stored; replaced with the live scope through installSection. */
-  let roster: RosterSettingsState = { enabled: [], customExperts: [] }
-
-  // Declared before the settings hook below: `ctx.inject` may run its callback
-  // immediately, and the provider validates the stored section at registration,
-  // so a hook that reached these would otherwise run during the temporal dead zone.
-  const hostLocale = (): LocaleId => readLocalePreference(ctx)
 
   /** Language the roster text renders in: always the interface language. */
-  const rosterLocale = (): LocaleId => hostLocale()
+  const rosterLocale = (): LocaleId => readHostLocale(ctx)
 
   /** Language the persona text loads in: the preference, then the interface. */
-  const promptLocale = (): LocaleId => resolvePromptLocale(coercePromptLocale(source().promptLocale), hostLocale())
+  const promptLocale = (): LocaleId => resolvePromptLocale(readPromptLocale(ctx), rosterLocale())
+
+  /** Roster state for an entry the harness does not serve: nothing is stored. */
+  const EMPTY_ROSTER: RosterSettingsState = { enabled: [], customExperts: [] }
+  let rosterReported = false
 
   /**
-   * The stored roster state, with a container that is not an array read as
-   * "nothing stored".
+   * The stored roster state, as the settings form projects it.
    *
-   * The section comes from a document a user can hand-edit, and the schema
-   * deliberately accepts whatever it holds (see `Config`): a wrong container
-   * shape must cost the user their custom experts until they fix it, not cost
-   * them the whole namespace. What was wrong is logged by the `validate` hook.
+   * The first read that finds this plugin's own entry reports what a
+   * hand-edited document got wrong. The report cannot happen at `apply` time:
+   * the harness only projects an entry whose fiber is already ACTIVE, so this
+   * plugin's own row does not exist yet while `apply` runs. Doing it once, on
+   * the first read that finds the row, keeps the diagnosis without logging the
+   * same complaint on every toggle.
    *
    * @returns the enabled slugs and the stored custom experts.
    */
   const readStoredRoster = (): RosterSettingsState => {
-    const current = source()
-    return {
-      enabled: Array.isArray(current.enabled) ? current.enabled : [],
-      customExperts: Array.isArray(current.customExperts) ? current.customExperts : [],
+    const reading = readRosterSettings(ctx)
+    if (reading === undefined) return EMPTY_ROSTER
+    if (!rosterReported) {
+      rosterReported = true
+      // The report reads the stored values, not the normalized ones: the shape
+      // a hand-edit got wrong is exactly what normalization removes.
+      for (const problem of validateRosterSettings(reading.raw, rosterLocale())) {
+        ctx.logger.warn(`[${name}] ${problem}`)
+      }
     }
+    return reading.state
   }
 
+  /**
+   * Opt out of the automatically generated settings page.
+   *
+   * 0.1.7 derives a form for every entry's `.volatile()` fields and would offer
+   * this plugin's own page in the Plugins section as well. This plugin renders
+   * the roster itself under `settings.section`, so it declares the page as its
+   * own; the projection the browser edits stays the same one either way.
+   */
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, SETTINGS_NS, Config, config, {
-      setSource: (current: () => Config) => {
-        source = current
-        roster = readStoredRoster()
-      },
-      onChange: () => {
-        roster = readStoredRoster()
-      },
-      validate: (value: Config) => {
-        // The hook records what a document got wrong instead of refusing the
-        // registration, so dropping the record would leave the degradation
-        // undiagnosable: the roster quietly loses entries and nothing says why.
-        for (const problem of validateRosterSettings(value, hostLocale())) {
-          ctx.logger.warn(`[${name}] ${problem}`)
-        }
-      },
-    })
+    settingsCtx.effect(() => settingsCtx.settings.configure({ auto: false }, ctx.fiber))
   })
 
   /**
@@ -431,25 +461,28 @@ export function apply(ctx: Context, config: Config): void {
   const library: RosterLibrary = createRosterLibrary(
     async () => [...(await experts()).values()],
     {
-      read: () => roster,
-      revision: () => {
-        const descriptor = ctx.settings.describe().find((candidate) => candidate.ns === SETTINGS_NS)
-        if (descriptor === undefined) throw new Error(formatHost(rosterLocale(), 'error.rosterUnavailable'))
-        return descriptor.revision
-      },
+      read: () => readStoredRoster(),
+      revision: () => rosterRevision(ctx, rosterLocale()),
       mutate: (ops, expectedRevision) => ctx.settings.mutate(SETTINGS_NS, ops, expectedRevision),
     },
-    () => coercePromptLocale(source().promptLocale),
+    () => readPromptLocale(ctx),
     () => rosterLocale(),
   )
 
-  // The Remote half is a separate top-level row (see cordis.patch.yml), so the
-  // roster it serves has to be reachable from there: both faces are provided on
-  // the root context rather than closed over. The summon tools read the same
-  // object, so a persona can only ever be served one way.
+  // Both faces are provided on this plugin's context rather than closed over,
+  // so the summon tools and the Remote service below read one object: a persona
+  // can only ever be served one way.
   ctx.provide(AGENCY_LIBRARY_SERVICE, library)
   const loadExpertPersona = createPersonaSource(library, roots)
   ctx.provide(AGENCY_PERSONA_SERVICE, loadExpertPersona)
+
+  // The Remote half is a child plugin rather than its own top-level row. A
+  // package may hold only ONE active Loader row: the client module system keys
+  // its bundle table by package and refuses two rows that resolve to the same
+  // one. The gateway still finds the service — Cordis registers services in the
+  // root store, which every fiber reads — and the typert contribution this
+  // child registers is what carries the strict descriptors.
+  ctx.plugin(AgencyAgentsRemote)
 
   /** Chinese name when translated, English name otherwise. */
   const displayName = (expert: Expert): string => (expert.nameZh !== '' ? expert.nameZh : expert.nameEn)
@@ -686,12 +719,15 @@ export function apply(ctx: Context, config: Config): void {
     const roster = rosterLocale()
     const taskText = normalizeTask(task, roster)
     if (exec.agent === undefined) throw new Error(formatHost(roster, 'error.summonRequiresAgent'))
-    const provider = ctx.subagents.getProvider(source().provider)
-    if (provider === undefined) throw new Error(formatHost(roster, 'error.providerMissing', { provider: source().provider }))
-    if (!provider.capabilities.persona) throw new Error(formatHost(roster, 'error.providerNoPersona', { provider: source().provider }))
-    if (!provider.capabilities.toolFilter) throw new Error(formatHost(roster, 'error.providerNoToolFilter', { provider: source().provider }))
+    // `provider` is ordinary config, so it is fixed for the life of this mount:
+    // changing it reloads the plugin rather than editing the running one.
+    const { provider: providerName } = config
+    const provider = ctx.subagents.getProvider(providerName)
+    if (provider === undefined) throw new Error(formatHost(roster, 'error.providerMissing', { provider: providerName }))
+    if (!provider.capabilities.persona) throw new Error(formatHost(roster, 'error.providerNoPersona', { provider: providerName }))
+    if (!provider.capabilities.toolFilter) throw new Error(formatHost(roster, 'error.providerNoToolFilter', { provider: providerName }))
     const persona = await loadExpertPersona.getPrompt(expert.slug, expert.division, text)
-    const run: SubagentRun = await ctx.subagents.start(source().provider, {
+    const run: SubagentRun = await ctx.subagents.start(providerName, {
       label: `expert:${expert.slug}`,
       prompt: [{ type: 'text', text: taskText }],
       parent: exec.agent,

@@ -6,8 +6,13 @@
 
 插件已建成并**在 desktop profile 上运行**：DeepSeek Harness 的中英双语 Agency 专家名册，279 位专家 / 18 个分区，中文名与中文简介齐备，提示词语言可切换，Host 工具与浏览器端均可用。**系统提示里也会告诉模型名册存在**，并写明「只在用户明确要求时才召唤」（见 §5.19）。
 
-> **还没实测的**：只剩浏览器端几个没人碰过的控件 —— 查看提示词 / 复制提示词、筛选（只看已启用）、自定义专家编辑器。设置页搜索、`@` 触发菜单、真实召唤、以及改名后两位专家的卡片开关**都已实测**（见第 3 节，完整清单见第 4 节）。
-> 基础设施与四条工具路径均已实测通过；没有进行中的改动，工作区干净。
+> **2026-09-28：已适配 DSH `0.1.7-rc.2`**（此前钉在 `0.1.5-rc.2`）。三条会让插件整体不加载的硬不兼容已修掉，并补上两条会导致浏览器半边失效的契约变化 —— 全部取证、修法与验证见 **§5.21**；重启 desktop app 后 Host 路径已复测通过（§5.21.10）。
+> **代价**：0.1.7 的桌面版**没有 Host 模块热重载**，改 Host 代码必须重启 DSH Desktop（§5.21.6）。旧文档里「改完不用重启」的承诺从这一版起不成立。
+> **升级副作用（已处理）**：harness 的设置迁移没能把本插件的 section 导进来，用户此前启用的 **6 位专家一度全部丢失**。数据一直在 `%DSH_HOME%\settings.yaml.imported`（改名而非删除），已写回 profile patch 恢复 —— 原因、证据与恢复步骤见 **§5.21.12**。**那个 `.imported` 文件是本机唯一的一份，不要删。**
+
+> **还没实测的（0.1.7 这一轮）**：**没有了**。Host 侧（日志无错 + 4 个工具路径）与浏览器侧（名册页渲染、搜索、`@` 菜单、卡片开关，用户实测确认）都已在 `0.1.7-rc.2` 的 desktop profile 上复测通过，见 §5.21.10。仍循旧例未单独验证的只有 Remote 的真实 HTTP 路由（页面可用即间接证明可达），以及 0.1.5 时代就没碰过的「查看提示词 / 复制提示词 / 自建专家编辑器」三个控件。
+
+> **同一份清单在 0.1.5 上的状态（已被上一条取代，保留作对照）**：当时只剩浏览器端几个没人碰过的控件 —— 查看提示词 / 复制提示词、筛选（只看已启用）、自定义专家编辑器；设置页搜索、`@` 触发菜单、真实召唤、改名后两位专家的卡片开关**都已实测**（见第 3 节）。**0.1.5 的"已实测"不能继承给 0.1.7**：客户端的设置服务换了（`settingsScope` → `configForms`），所以那条链路上的每一处都要重新看一眼。
 
 > **5.6–5.9 是同一个问题的四轮收敛**：设置面板的滚动条随名册长短出现/消失，内容框宽度差 8px。
 > 前两轮治的都是症状（会伸缩的字段、右锚定的按钮），5.9 才从根上锁死宽度，**已经用户实测确认**。
@@ -27,11 +32,11 @@
 | P5 发布 | ⏳ | 只差打 tag。**四条工具路径已全部真跑过**（见第 3 节），可以打了 |
 | P6 头像 | ✅ | 279/279 交付、校验、接入（见 5.10）。`verify` 三条门禁钉住一致性；明暗主题均已真机确认 |
 
-**门禁现状（2026-09-13，含 §5.18 的整改；HEAD 见 `git log`）**：
+**门禁现状（2026-09-28，DSH `0.1.7-rc.2`；含 §5.21 的适配；HEAD 见 `git log`）**：
 
 ```
 pnpm build   exit=0      （typecheck：avatars:inline + 两份 tsconfig；然后 tsdown）
-pnpm test    107 passed  （roster-settings 17 + remote 16 + host 40 + client/jsdom 34）
+pnpm test    108 passed  （roster-settings 17 + remote 16 + host 41 + client/jsdom 34）
 pnpm verify  exit=0      35 项
 pnpm check   exit=0      13 项，roster 279 / aligned 279 / suspect 0 / missing 0
 pnpm authoring exit=0    0 项待办
@@ -92,7 +97,7 @@ describe_expert(上线就绪度评审专家)
 | 浏览器端：查看提示词 / 复制提示词 | **未实测**（用户没走过这两个按钮） |
 | 浏览器端：筛选（只看已启用）、自定义专家编辑器 | **未实测**（用户没有自建专家） |
 | 卡片开关（整改后重启） | **已实测**（同日）：重启后拨动两位改名专家的开关，能正常开关、**不再报错**（见第 3 节）。此前那条 `error.unavailable` 是旧后台半边造成的 |
-| 客户端 `ctx.settingsScope.bind({ namespace })` 是否真能写 `promptLocale` | 未单独验证；失败时会显示 `error.save`，不会静默 |
+| 客户端设置表单（0.1.5 的 `settingsScope` / 0.1.7 的 `configForms`）是否真能写 `promptLocale` | 未单独验证（需重启后的浏览器实测）；失败时会显示 `error.save`，不会静默 |
 | Remote 的真实 HTTP 路由 | 用户的设置页能用即间接证明可达；`@` 菜单实测后这条更硬了 |
 | `.aall-switch` 绝对定位输入的包含块 | 已加 `position:relative` 兜底；未确认宿主对 `input[type=checkbox]` 是否有更高优先级的全局规则 |
 | 卡片宽度随滚动条变 8px | **5.9 已治并经用户实测确认**。若日后复发，剩下的两手见 5.9 末尾 |
@@ -447,9 +452,11 @@ C:\Users\LL\.dsh\profiles\desktop\node_modules\dsh-agency-agents-ll
   → Junction → G:\dsh\dsh-agency-agents-ll
 ```
 
-DSH 看到的就是仓库本身。剩下的唯一问题是**重建后 DSH 会不会重新加载** —— 会，两个半边都有热重载，**profile 里默认就开着**：
+> **⚠️ 本节描述的 Host 热重载在 DSH `0.1.7-rc.2` 上不成立**，只对浏览器半边成立。看到 §5.14 的结论前请先读 **§5.21.6**：0.1.7 的桌面版没有 Host 模块 HMR，改 Host 代码要重启。下面保留 0.1.5 上的原始记录。
 
-| 半边 | 机制 | 行为 |
+DSH 看到的就是仓库本身。剩下的唯一问题是**重建后 DSH 会不会重新加载** —— 在 0.1.5 上会，两个半边都有热重载，**profile 里默认就开着**：
+
+| 半边 | 机制（0.1.5） | 行为 |
 |---|---|---|
 | Host（`lib/index.js`） | `@deepseek-ai/cordis-plugin-hmr`（`launchWatchMs: 1000`） | 文件变化后重载插件 |
 | 浏览器（`lib/client.js`） | `@deepseek-ai/dsh-client-hmr`（`pollIntervalMs: 500`） | 轮询 bundle，**原地热替换，无需刷新** |
@@ -752,10 +759,236 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 1. **把断言变成会失败的测试**（本轮已证两次有效）；
 2. **换任务形状而不是换模型**：不问"这段代码有什么问题"（容易退化成回忆），而问"**给我一个输入，让这条注释变成假的**"——要求产出可执行的东西，很难靠回忆糊过去。
 
+## 5.21 DSH `0.1.7-rc.2` 适配（2026-09-28）
+
+**前提**：DSH Desktop 在 2026-09-26 升到 `0.1.7-rc.2`（`dsh-plugin-desktop 2.0.15`，`node_modules/@deepseek-ai/*` 全部 `0.1.7-rc.2`，`cordis 4.0.4`，`schemastery 3.18.4`），而插件钉的是 `0.1.5-rc.2`。升级后**插件整体不加载** —— 4 个工具在会话里直接消失，设置页也没有了。取证方式：读宿主日志 `%APPDATA%\DSH Desktop\logs\host\dsh-<日期>.log`，里面有下面三条原文。
+
+### 5.21.1 三条硬不兼容（每一条都足以让插件整体不加载）
+
+| # | 日志原文（现场） | 根因 | 修法 |
+|---|---|---|---|
+| 1 | `[E] [agency-agents-ll] TypeError: settingsCtx.settings.installSection is not a function`（`lib/index.js:551`） | 0.1.7 删掉了「插件注册设置命名空间」这套 API。`ctx.settings` 现在是 `SettingsForms`：`describe / update / replace / mutate / write / configure / schema`，**既没有 `installSection` 也没有 `get(ns)`**；设置改为**从插件自己的 Cordis `Config` 派生** | 保留 `export const Config` 并给可变字段加 `.volatile()`；用 `settings.configure({ auto: false }, ctx.fiber)` 声明「本入口自带页面」；活值改从 `ctx.settings.describe()` 读 |
+| 2 | `[E] [agency-agents-remote] Error: typert: dsh-agency-agents-ll#agencyAgents/getCatalog result strict codec has no create() factory` | `TypertCodec` 的 strict 形态从 `{ mode, typeSymbol, schema }` 变成 `{ mode, typeSymbol, create: () => TypertSchema }`，注册时由 `validateCodec` 强制（`src-json` 模式不受约束） | `strict()` 改成 `create: () => schema`。`TypertSchema` 只要求有 `parse()`，zod schema 天然满足 |
+| 3 | `[W] [client-module-registry] Error: client-modules: package dsh-agency-agents-ll resolves from multiple active Loader sources: "…/lib/remote.js" …, "…/lib/index.js" …; remove one entry` | 0.1.7 的浏览器模块表**按包去重**：一个包只允许一个活跃 Loader 行。而本插件为了 Remote 路由刻意挂了**两行**（`agency-agents-ll` 与 `agency-agents-ll-remote`） | 收敛成**一行**；Remote 服务改为同包内的子插件，由 `index.ts` 用 `ctx.plugin(AgencyAgentsRemote)` 挂载 |
+
+**第 3 条的完整推理（因为它是唯一一条推翻旧设计决定的）**：
+
+「Remote 半边必须是独立顶层行」这条结论写在旧的 `cordis.patch.yml` 注释里，理由是「网关从根服务表发现路由，别的插件 fiber 里提供的服务不可路由」。它在 0.1.5 上可能是对的，但**在 0.1.7 上不成立**，两处源码可以证：
+
+- `@deepseek-ai/cordis` 的 `provide()` 写的是**根 store**：`this.store[key] = impl`（另有 `this.ctx.fiber.store[name]` 一份），`get()` 按 isolate 符号查同一个 store。所以任何 fiber 提供、任何 fiber 读取，兄弟节点之间没有可见性问题。
+- `dsh-api-gateway` 的 `prepareInvocation()` 用 `resolveReceiverContext()` 拿接收方 ctx，`direct` 调用直接返回 `this.ctx`；真正的路由来源是 **`ctx.typert.register(TYPERT)` 那份描述符贡献**（`resolveDescriptor()` 先查 `ctx.typert.local`，查不到才回退到「扫根服务表」的 SRC 模式），与行的位置无关。
+
+所以单行 + `ctx.plugin()` 子插件是安全的，也是 0.1.7 唯一可行的排布。
+
+### 5.21.2 设置模型变了：从「注册命名空间」到「投影自己的 Config」
+
+0.1.7 的模型（`dsh-settings/README.zh.md` + 源码）：**不再有独立的设置文档**。`SettingsForms.describe()` 遍历 Loader 的活动条目，对每个条目的 `Config` 求 `volatileForm()`，返回一行 `{ ns, schema, revision, value, base, user, autoGenerate }`，其中 `ns` 就是**profile 条目的 id**。写走 `mutate(ns, ops, expectedRevision)` → `configEditor.edit()` → 写进 profile 的 `cordis.patch.yml`，并且**只允许 `.volatile()` 字段**（`isVolatilePath` 逐路径校验）。
+
+插件因此变成：
+
+```ts
+export const Config = z.object({
+  promptLocale: z.union([...]).default('en').volatile(),  // 活字段：改它不重挂插件
+  root: z.string().default(''),        // 普通字段：改它重挂插件（本来就要重读名册）
+  provider: z.string().default('spawn'),
+  enabled: z.any().default([]).volatile(),
+  customExperts: z.any().default([]).volatile(),
+})
+```
+
+四条实现决定，每条都有一个具体的失败面在背后：
+
+1. **活值从 `describe()` 读，不从 `config` 参数读。** `.volatile()` 字段在解析后的 config 里是 **cosmokit 引用**（`{get, Symbol(cosmokit.volatile.write)}`），不是值 —— 直接 `config.enabled` 拿到的是个对象。`describe()` 的投影（`plainConfig` → `projectForm`）已经替我们解开了，再用第二套解包规则就会和浏览器那半边对同一份文档产生两种读法。新增 `src/host-settings.ts` 收口这件事。
+2. **`enabled` 也从 `z.array(z.string())` 放宽成 `z.any()`。** 旧版 schema 拒绝一个值，代价只是那块设置不可用；0.1.7 里是**整个条目加载失败**（连带 4 个工具一起消失，且没有重试入口）。这个字段是手可编辑的文档，所以照 `customExperts` 的老办法：schema 收下任何东西，读的时候降级，`validateRosterSettings` 记录问题。**「读取可以降级，写入绝不丢数据」这条契约因此扩到了 `enabled`**，并新增一条 `enabled:` 开头的记录（此前只报 `customExperts[i]`）。
+3. **校验时机从「注册时」挪到「第一次读到本条目时」。** 旧代码在 `installSection` 的 `validate` 钩子里报告坏文档；现在没有注册钩子了，而 `apply` 执行期间**本条目还不存在** —— `describe()` 只投影 `fiber.state === 2`（ACTIVE）的条目，`apply` 跑在 state 1。所以报告挂在「第一次成功读到本条目」上，只报一次。
+4. **`readRosterSettings()` 用 `undefined` 区分「宿主没有这个条目」与「用户什么都没存」。** 这两种情况都该返回空集合，但只有前者说明写入根本无法围栏；混在一起会让「写入静默丢失」看起来像「还没存过」。
+
+### 5.21.3 浏览器半边：`settingsScope` → `configForms`
+
+| | 0.1.5 | 0.1.7 |
+|---|---|---|
+| 服务名（`inject`） | `settingsScope` | `configForms` |
+| 拿一个命名空间 | `ctx.settingsScope.bind({ namespace })` | `ctx.configForms.get(entryId)` |
+| 读 | `getSnapshot().value` | 同（`ConfigFormSnapshot.value`） |
+| 写 | `set(field, value)` | 同（返回 `Promise<boolean>` 而不是 `Promise<void>`） |
+| 服务提供方 | `dsh-client-ui-settings` | 同为 `dsh-client-ui-settings`（客户端半边 `super(ctx, "configForms")`） |
+
+本插件只写 `promptLocale` 一个字段，所以适配就是换一行 + 把本地接口的返回类型放宽成 `Promise<unknown>`。名册数据本身仍然走自己的 Remote 服务，没有搬进表单。
+
+**另外两处趁编译期查过、结论是「不用改」的**（都靠读 0.1.7 的源码确认，不靠猜）：
+
+- `ctx.slots.inject(key, cb)` **仍然存在**，只是搬到了 `dsh-client-ui-renderer`（`slots` 服务的提供方）：内部用新的 `SlotCore.subscribeDeclaration()`，语义正好是我们要的 —— 声明时就同步跑 cb、声明消失时 dispose 它的返回的清理器、之后再声明再跑。`settings.section` 仍是 list slot，`label` 仍接受 `string | (() => string)`，`locale` 仍取 `LocaleNamespaceMap` 的键。
+- `ctx.remote.$mount(contribution)` 与 `ctx.get('remote.<namespace>')` 都没变（`remoteServiceKey(ns) === \`remote.${ns}\``）。
+
+### 5.21.4 平台冻结模块表：只对齐「宿主真的提供的那些」
+
+`tsdown.config.ts` 的 `neverBundle`（客户端保持 external 的名单）此前抄的是 0.1.5 的冻结表，其中 `dsh-client-web-react` / `dsh-client-ui-attachment` / `dsh-client-schema-form` **在 0.1.7 里整包都不存在**。0.1.7 的 seed 表在 web shell 里（`dsh-web-frontend/dist/assets/index-*.js` 的 `staticModules`），逐字是：
+
+```
+react, react/jsx-runtime, react-dom, react-dom/client, @deepseek-ai/cordis,
+@deepseek-ai/dsh-client-store, @deepseek-ai/dsh-client-ui-slots,
+@deepseek-ai/dsh-client-ui-primitives, @deepseek-ai/dsh-client-ui-dockkit
+```
+
+**两个方向都会坏**：表里多了宿主没提供的，bundle 一 require 就撞「missed the module table」；表里少了宿主提供的，就会内联出第二份实现（React/cordis 双实例）。`scripts/verify.mjs` 与 `PLATFORM_MODULES` 同步更新。顺带把 `@deepseek-ai/dsh-client-ui-conversation` 加进 `dsh.client.inject` —— 客户端真的用它的 `conversation.input.left` 槽位与 `conversation` 服务，此前没声明（`dsh-context` 这份 0.1.7 兼容插件是这么声明的）。
+
+### 5.21.5 改了什么（一览）
+
+| 文件 | 改动 |
+|---|---|
+| `package.json` | 所有 `@deepseek-ai/*` → `0.1.7-rc.2`；`schemastery` → `~3.18.4`；删掉 `@deepseek-ai/dsh-client-runtime`（**0.1.7 线里根本不存在这个包**，最新只到 `0.0.1-rc.1`）与 `@deepseek-ai/dsh-code-runtime`（0.1.7 线里也不存在，且全仓库无人引用）；删掉 `./remote` 导出；`dsh.client.inject` 去掉 `dsh-client-runtime`、加上 `dsh-client-ui-conversation` |
+| `cordis.patch.yml` | 两行 → **一行**，并写明为什么 |
+| `tsdown.config.ts` | `remote` 入口删除（改为被 `index` 内联）；`PLATFORM_MODULES` 对齐 0.1.7 seed 表 |
+| `src/host-settings.ts`（新） | 从 `ctx.settings.describe()` 读本条目（活值 / revision / 原始值）与 `locale` 条目的界面语言 |
+| `src/index.ts` | `Config` 加 `.volatile()`；`installSection` → `configure({auto:false})`；`source()`/`roster` 缓存 → 每次从投影读；`MountConfig` 只保留 `apply` 真正直接读的普通字段；`ctx.plugin(AgencyAgentsRemote)`；导出描述符表供门禁核对 |
+| `src/remote.ts` | 删掉 `settings.get()` 两处，改走 `host-settings`；模块头注释从「独立行」改为「同包子插件」 |
+| `src/remote-contract.ts` | `strict()` 用 `create()` |
+| `src/expert-contract.ts` | `validateRosterSettings` 新增 `enabled` 容器检查 |
+| `src/client/index.ts` | `settingsScope.bind` → `configForms.get`；`inject` 换服务名 |
+| `scripts/verify.mjs` | 新契约的四条断言：不导出可挂载 Remote 行、patch 只挂一行、Host 自己挂载 Remote 服务、每个 strict codec 都有 `create()`；`PLATFORM_MODULES` 同步 |
+| 三份测试的假 ctx | 假 `settings` 从 `get()+installSection` 改成 `describe()+configure()`；客户端假 ctx 从 `settingsScope` 改成 `configForms`；codec 断言从 `.schema.parse` 改成 `.create().parse` |
+
+### 5.21.6 0.1.7 的桌面版**没有** Host 模块热重载（旧承诺作废）
+
+README 此前写着「改完代码不用重装也不用重启」，依据是 0.1.5 上实测过的两个热重载机制。**在 0.1.7 上这条只对浏览器半边成立**：
+
+| 半边 | 0.1.7 的机制 | 实测结果 |
+|---|---|---|
+| 浏览器（`lib/client.js`） | `@deepseek-ai/dsh-client-hmr` 每 500ms 轮询 | **有效**：重建后渲染进程 1 秒内取走新 bundle（`Cache_Data` 里那个 633 KB 文件的 mtime 与构建时间逐次吻合） |
+| Host（`lib/index.js`） | `@deepseek-ai/dsh-hmr`（`dsh-base` 给它的默认是 `root: []`） | **无效**：重建后等了数分钟无任何反应；改 profile 的 `cordis.patch.yml` 逼 Loader 重新挂载，日志里跑的**仍是旧模块**（堆栈照旧指向 `installSection` 那一行） |
+
+第二条尤其值得记：**Loader 重新挂载 ≠ 重新读磁盘**。`lib/index.js` 的 URL 没变，Node 的 ESM 缓存就把旧实例还了回来，所以「改配置触发 reload」这条常用手段对改代码无效。`dsh-hmr` 自己在 `root` 非空时会抛 `--expose-internals is required for module HMR`，而桌面版没带这个开关（`dsh` **CLI** 带了，所以命令行起的 profile 有模块 HMR，桌面 app 没有）。
+
+**结论：改 Host 代码必须重启 DSH Desktop。** 改浏览器半边仍然免刷新。`pnpm dev` 继续有用，但它现在只保证客户端半边即时生效。
+
+### 5.21.7 怎么验证的
+
+1. **静态**：`pnpm build`（两份 tsc + tsdown）exit 0；`pnpm test` **108 passed**（比适配前多 1 条：新增「非 slug 的启用标记会被记录」）；`pnpm verify` **35 项**全过；`pnpm check` **13 项**全过，roster 279 / aligned 279 / suspect 0 / missing 0。
+2. **组合**：`dsh --profile desktop --dump-config` 里本插件只有**一行** `id: agency-agents-ll / name: dsh-agency-agents-ll` —— 同时确认了设置用的 `ns`（条目 id）与 `SETTINGS_NS` 是同一个字符串。
+3. **真机端到端（同一个真实 harness，独立进程）**：用 CLI 的 `headless` profile 起一次性任务，用 `--patch` 覆盖层把插件按文件 URL 挂进去：
+   ```
+   dsh --profile headless --patch <overlay> "<要求它调用 list_experts / describe_expert 的任务>"
+   ```
+   `list_experts` 返回「共 279 位可选专家，覆盖 18 个分区」的完整名册；`describe_expert(研究综合专家)` 返回中文名、英文名、简介、完整中文简介与「中文提示词：已提供」。**这一条同时证明了四件事**：条目被 `describe()` 投影出来（否则 `rosterRevision` 会抛 `rosterUnavailable`）、strict codec 通过注册校验、4 个工具真的注册进来了、名册与 persona 读取链路完好。日志里**没有** `installSection`、没有 `no create() factory`、没有 `multiple active Loader sources`。
+   > 为什么当时不用 desktop profile 现场验证：见 §5.21.6，桌面进程里跑的是缓存的旧模块，只能重启才换得掉；而重启会终止当时的会话。headless 进程是同一个 harness 代码、同一份 profile 组合逻辑，且不需要动用户的 desktop profile。**重启之后 desktop profile 也补测了，结果见 §5.21.10。**
+4. **验证完成**：Host 半边在 headless 进程与重启后的 desktop profile 上都跑通了（§5.21.10）；浏览器半边由用户实测确认（名册页渲染、搜索、`@` 菜单、卡片开关）。客户端 jsdom 测试（34 条、用真实 279 份资产）覆盖渲染与写入契约。**仍未单独验证**：Remote 的真实 HTTP 路由（页面可用即间接可达），以及「查看提示词 / 复制提示词 / 自建专家编辑器」这三个 0.1.5 时代也没人碰过的控件。
+
+### 5.21.8 顺手修掉的 profile 残留
+
+profile 的用户 patch 层（`%DSH_HOME%\profiles\desktop\cordis.patch.yml`）里留着 `- id: agency-agents-ll-remote` 一行 —— 那是早先 dshmarket 切换插件时写进去的。行已经不存在了，于是每次加载都刷一条 `patch: entry "agency-agents-ll-remote" not found`。已删除该条（保留 `- id: agency-agents-ll`），日志恢复干净。
+
+### 5.21.9 这次适配留下的两条方法论
+
+1. **升级后先读宿主日志，再读文档。** 三条硬不兼容的原文、行号、包名全在 `logs/host/*.log` 里，比任何变更日志都直接；而 `.d.ts` 在桌面版安装里被剥掉了（`dsh-*` 包的 `lib/types/*.d.ts` 不在 node_modules 里），所以「查 API」只能读 `lib/index.js` 源码或本地 `pnpm install` 出来的那份带类型的副本。
+2. **「重新挂载」和「重新读代码」是两件事。** §5.21.6 那条之所以绕了很久，是因为一直默认「Loader 重挂了就会读新文件」。判断当前跑的是哪份代码，最省事的办法是让**新代码本身**留下一个可观测痕迹（当时是写一个临时文件），而不是比对报错文案 —— 旧代码和新代码恰好会抛出同一句 `rosterUnavailable`。
+
+### 5.21.10 重启后的 desktop profile 实测（2026-09-28 18:51）
+
+用户在 **18:51:51 重启 DSH Desktop**。重启后的宿主日志（18:51:53 起）**没有任何 `agency-agents-ll` 相关条目**：§5.21.1 那三条硬不兼容全部消失，只剩另一个插件自己的 `patch: entry "ui-settings-unarchive-sessions" not found`（与本插件无关）和 dsh-market 的一条告警。
+
+真实 desktop profile 上的 Host 路径随即复测通过：
+
+```
+list_experts(division="research")   → 研究（1）
+                                      - 🔍 研究综合专家 —— …
+describe_expert(文化人类学家)        → 🌍 文化人类学家（学术）/ 英文名：Anthropologist /
+                                      一句话简介 + 完整中文简介 + 「中文提示词：已提供」
+```
+
+第二条同时钉住三件事：merged roster 可解析、`intro` 与简介读取完好、**档案形态判定正确**（文化人类学家是 6 位带中文正文的 `translated` 之一，报告说「已提供」；同一轮跑 `投资研究员` 这个 `intro-only` 时报告「未提供，召唤时使用英文原文」）。
+
+**顺带排除一个误判**：renderer 日志里那条 `failed to checkpoint the healthy profile configuration: … checkpoint backup is incomplete: cordis.patch.yml` **不是** §5.21.8 改动 profile 造成的 —— 它在 2026-09-27 的日志里就已经出现 3 次（当天 4 次，覆盖我改动之前的几次启动）。
+
+**浏览器半边：用户实测确认（同日，重启后）。** 用户打开 设置 → 专家库，确认三件事都正常：**名册卡片正常渲染**（279 张）、**搜索框能过滤**、**输入框 `@` 能弹出专家菜单**，并且**拨动卡片开关有效**。这一条把 `settingsScope` → `configForms` 那处改写钉在了真机上 —— 那是本轮唯一一处「编译通过但只有真实宿主才能证明」的改动，也是 0.1.7 与 0.1.5 差别最大的地方（设置服务换了提供方与 API）。
+
+至此本轮适配的验证齐了：Host 半边（日志 + 4 个工具）与浏览器半边（用户界面）都已在 `0.1.7-rc.2` 的 desktop profile 上实测通过。**唯一仍未单独验证的是 Remote 的真实 HTTP 路由** —— 但与 0.1.5 时一样，页面能用即是它可达的间接证据。
+
+### 5.21.11 「查看提示词」弹窗背景透明（Windows 独有，用户报告）
+
+**现象**（用户报告，2026-09-28，重启后）：点「查看提示词」弹出的提示词页面背景太透明，读不清。
+
+**根因**：`.aall-dialog` 的 `background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2))` —— 这个 token 是**菜单材质**填充，不是对话框表面。主题里三处定义（`dsh-client-ui-theme/lib/client.js`）：
+
+```css
+body                      { --dsw-menu-surface-fill:#f8f9fa94; --dsw-specific-menu:var(--dsw-menu-surface-fill) }  /* 浅色 58% alpha */
+body[data-ds-dark-theme]  { --dsw-menu-surface-fill:#43454a73; ... }                                               /* 深色 45% alpha */
+html[data-platform=darwin] body{ --dsw-specific-menu:#f8f9faf0 }  /* 只有 macOS 覆盖成近乎不透明 */
+```
+
+**macOS 是唯一例外**，因为那边由原生 vibrancy 提供模糊；其余平台靠配套的 `body{--dsw-menu-backdrop-filter:blur(40px) saturate(150%)}`。宿主自己的菜单正是这么配的 —— `ui-primitives/lib/MenuSurface.module.css` 用一个独立 `.material` 层同时上 `background: var(--dsw-menu-surface-fill)` 与 `backdrop-filter: var(--dsw-menu-backdrop-filter)`。**我们只拿了填充、没拿模糊**，于是在 Windows 上弹窗就是一块 58% 的白（浅色主题）盖在 56% 黑的遮罩上，后面的卡片透出来。
+
+**宿主对对话框的规范**写在 `ui-primitives/lib/Modal.module.css` 里，连注释都点明了：*"Dialogs use the prominent elevation on the secondary layer"* —— `.dialog{ background: var(--dsw-alias-bg-layer-2); box-shadow: var(--dsw-elevation-prominent) }`。**半透明材质是菜单的，不是对话框的。**
+
+**修法**（两处，同一根因）：
+1. `.aall-dialog` 改用不透明的 `var(--dsw-alias-bg-layer-2)`。一条规则同时修好三个弹窗：查看提示词、删除确认、自建专家编辑器。
+2. `.aall-menu`（输入栏「专家」下拉）**保留**菜单填充（它确实是菜单），但补上 `backdrop-filter: var(--dsw-menu-backdrop-filter)`，与宿主自己的 `@` 菜单一致。**这一处用户没报，是从同一机制推出来的** —— 不修的话它就是同一个"文字透出来"的问题，只是菜单小、更容易被忽略。
+
+**教训**：`var(--x, fallback)` 只在 `--x` **未定义**时生效；`--x` 被定义成半透明时，兜底永远轮不到。所以"带兜底的取值"表达不了"我要不透明" —— 想要确定的表面，就直接引用那个确定的 token。
+
+**验证与生效**：`tsc`（两份）+ 108 tests + 35 项 verify + 13 项 check 全绿；重建后渲染进程 1 秒内取走新 bundle（`Cache_Data` 里 `f_00094b` 的 mtime `19:00:51` 与构建时间同秒）。**这一处不需要重启** —— 浏览器半边仍然热替换，正好反衬 §5.21.6 里 Host 半边的处境。
+
+> **同一个坑的自我复现**：改这段注释时我在 CSS 模板字符串里写了反引号，把 `const CSS = \`…\`` 截断了。`tsc` 立刻报 `TS1005`，而当时 `vitest` 只跑了 **74 条**（客户端那个文件整个没加载）。这正是 §5.6 记下的那条纪律 —— **先 `pnpm build` 再跑测试** —— 再次生效。
+
+### 5.21.12 升级把用户"已启用"的专家弄丢了 —— 数据在哪、怎么恢复
+
+**现象**（用户报告，2026-09-28）：升级前启用过几位专家，升级后卡片全灭、`@` 菜单空。
+
+**数据没丢，只是没被导入。** 0.1.7 的 `SettingsForms.importLegacyDocument()` 会把 `%DSH_HOME%\settings.yaml` **改名**为 `settings.yaml.imported`，然后逐节调 `settings.update(sectionId, values)` 导进同 id 的条目。我们的那一节还在改名后的文件里：
+
+```yaml
+agency-agents-ll:
+  customExperts: []
+  enabled:
+    - engineering-prompt-engineer
+    - specialized-document-generator
+    - specialized-master-plan-architect
+    - specialized-workflow-architect
+    - product-manager
+    - research-synthesist
+  promptLocale: en
+```
+
+**为什么没导进去**：`update()` 走的是 `write()`，而 `write()` 要求该条目声明了 `.volatile()` 字段（`volatileForm(schema)` 为空时直接抛 `Plugin entry "…" has no volatile fields`）。迁移发生在 **2026-09-27 12:39:56**，那时插件**还是 0.1.5 的代码** —— Config 里一个 volatile 字段都没有，于是被拒；被拒的 section 按设计**留在改名后的文件里**（不删，只记一条 WARN）：
+
+```
+2026-09-27 12:39:56.582 [W] [settings-forms] settings: section agency-agents-ll of
+  C:\Users\LL\.dsh\settings.yaml.imported was not imported into entry agency-agents-ll
+```
+
+> **升级顺序决定会不会中招。** 先升级插件、再让 harness 跑迁移 → 没事；反过来（本例）→ 静默丢。失败是**非致命且静默**的：一条 WARN，然后照常启动，界面上只表现为"我启用过的怎么没了"。
+
+**同一次迁移还拒了三节**，说明这是 harness 迁移的普遍形状而非本插件特例：
+
+```
+[W] settings: section dsh-better-sidebar of …settings.yaml.imported was not imported into entry dsh-better-sidebar
+[W] settings: section dsh-context of …settings.yaml.imported was not imported into entry dsh-context
+[W] settings: section subagent-model-selection of …settings.yaml.imported was not imported into entry subagent-model-selection
+[I] settings: imported C:\Users\LL\.dsh\settings.yaml.imported into profile desktop
+```
+
+其中 `dsh-context` 丢的 `defaultPlacement: all` 恰好等于 schema 默认值，没有可见损失；另两个已不在该 profile 的 bundle 列表里。**本插件是唯一有可见损失的那个**（6 个启用标记）。
+
+**恢复办法**（2026-09-28 已执行）：把这 6 个 slug 写回 `%DSH_HOME%\profiles\desktop\cordis.patch.yml` 里该行的 `config.enabled` —— 即 0.1.7 存放插件设置的地方。profile patch 是 watched 的，**改完不用重启**：Loader 判定为 volatile-only 变更后走 `_commitVolatile()` 原地提交，日志里既没有 volatile 告警也没有错误。
+
+| slug | 专家 |
+|---|---|
+| `engineering-prompt-engineer` | 🧬 提示词工程师（工程） |
+| `specialized-document-generator` | 📄 文档生成工程师（专业） |
+| `specialized-master-plan-architect` | 🏛️ 总体规划架构师（专业） |
+| `specialized-workflow-architect` | 🗺️ 工作流架构师（专业） |
+| `product-manager` | 🧭 产品经理（产品） |
+| `research-synthesist` | 🔍 研究综合专家（研究） |
+
+6 位全部仍在当前名册里，且都能按名字解析（逐个 `describe_expert` 验过）。
+
+**顺带闭掉的一环**：恢复时发现 patch 里已经有一条 `config: enabled: []` —— 那是用户在界面上**拨卡片开关**时设置表单自己写出来的。这等于把 §5.21.3 那条「`settingsScope` → `configForms`」的真机链路补完了一整圈：`configForms.set('enabled')` → `remote.settings.mutate()` → `settings.write()` → `configEditor.edit()` → profile patch。**浏览器端的写入路径至此有真机证据，而不只是 jsdom 测试。**
+
+**教训**：`importLegacyDocument` 只在「目标条目当时已有 volatile 字段」时成功；失败既非致命也非显式（一条 WARN 而已）。所以升级 SDK 前后要做的核对是：**看一眼 `settings.yaml.imported` 里还有哪些 section** —— 尤其是带用户数据（启用列表、自建内容、偏好）的那些。这台机器上它是唯一的一份，**不要删**。
+
 ## 6. 环境要点（重开会话必读）
 
 - **`core.autocrlf = true`（系统级 gitconfig 的默认值）会把 checkout 出来的文件写成 CRLF，而 `git status` 看不出来。** 见 5.16。`assets/en`、`assets/zh` 已用 `.gitattributes` 钉成 `-text`，但**其它文件仍会被转换** —— 今后任何「对字节有契约」的新目录都要一起钉住。要判断磁盘真实字节就用 `[System.IO.File]::ReadAllBytes`，别问 git。另外 `git checkout -- <file>` 对 git 认为「干净」的文件是**空操作**（这正是当时没能把它改回来的原因），要强制重写必须先删掉再 checkout，或者用 `-c core.autocrlf=false`。
-- **`node` / `npm` 不在 PATH。** `pnpm`（11.8.0）与 `node` 都由 DSH Desktop 的 runtime shim 提供。
+- **`node` / `npm` 不在 PATH。**（2026-09-28 更新：本机现在**有**真的 `C:\Users\LL\AppData\Local\Programs\nodejs\node.exe`（v24.21.0），所以下面的 `.cmd` 绕法不再是唯一办法 —— 直接用它可以跑 `node_modules/typescript/bin/tsc`、`node_modules/tsdown/dist/run.mjs`、`node_modules/vitest/vitest.mjs` 与 `scripts/*.mjs`。`pnpm` 仍然只有 `.cmd` shim，绕法是 `node "…\resources\app\node_modules\pnpm\bin\pnpm.mjs"`。）
 - **⚠️ 不要用 `pnpm` / `node` 的 `.cmd` shim 跑命令 —— 会弹出可见的 CMD 窗口，打断用户用电脑。**
   实测（2026-09-13，用户报告后测得）：一轮完整门禁走 `pnpm.cmd` 会拉起 **11 个 `cmd.exe` / 7 个 `conhost.exe`，其中 1 个带可见窗口**。静置对照是 0。
   **根因**：没有真的 `node.exe` —— `node.cmd` 只是设 `ELECTRON_RUN_AS_NODE=1` 再调 Electron；`pnpm.cmd` 同理。而 `pnpm run <script>` 还要为脚本再套几层 `cmd.exe`。
@@ -819,7 +1052,7 @@ const strip = (text) => text.replace(/\r\n/g, '\n').replace(/"fetchedAt": "[^"]*
 ```powershell
 cd G:\dsh\dsh-agency-agents-ll
 pnpm build              # typecheck + tsdown（Host ESM / 客户端 ModuleLoader CJS）
-pnpm exec vitest run    # 107 项：roster-settings 17 + remote 16 + host 40 + 客户端 jsdom 34
+pnpm exec vitest run    # 108 项：roster-settings 17 + remote 16 + host 41 + 客户端 jsdom 34
 pnpm verify             # 35 项发布门禁
 pnpm check              # 13 项机械门禁 → sync/report.json
 pnpm sync               # 拉上游英文资产、刷新 manifest（幂等，离线）
@@ -841,7 +1074,7 @@ pnpm avatars:inline     # 由 assets/avatar 重新生成 src/client/avatars.ts
 ```powershell
 dsh plugin --profile desktop add G:\dsh\dsh-agency-agents-ll
 dsh plugin --profile desktop remove dsh-agency-agents-ll
-dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote 两行
+dsh --profile desktop --dump-config      # 应见 agency-agents-ll 这一行（0.1.7 起只有一行）
 ```
 
 隔离验证 profile `lltest`（`C:\Users\LL\.dsh\profiles\lltest`）同样以 link 方式装着本插件，改代码后无需重装即可验证，**不会影响 desktop**。
@@ -874,17 +1107,21 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 与 /remote �
 | 生成文件占 362 KB 而素材只有 222 KB | `encodeURIComponent` 会把 `<` `>` `"` `=` 全转义，膨胀 63%。想省这 140 KB 就得改用最小转义（只处理 `#` 和 `%`），但那要赌浏览器对裸 `<`/`>` 的容忍度 —— 目前选择"无聊但一定对" |
 | 参考实现里没有移植的能力 | 「猜宿主设置按钮」的 DOM 启发式。宿主 `ui-settings-general` 本地不可读、无法验证，故不做；菜单空态改为提示「请先在设置页启用」 |
 | 与 `@michengai/dsh-agency-agents` 的关系 | 用户已自行卸载。若两者同时安装会**工具名冲突**（都注册 `list_experts` / `summon_expert` / `summon_experts`） |
-| **刻意没做的事**（防止后来者"顺手修好"） | ① `Config.enabled` **不**按 `customExperts` 那样放宽成 `z.any()`——它会出现在设置表单里，改 schema 会改变表单渲染；运行期已做规范化，够了。② 头像检查器**不**因扩展名不是小写 `.svg` 判失败（现有素材全小写，那是新规则不是缺陷）。③ `@deepseek-ai/dsh-system-prompt` 保留在依赖里——**它现在是在用的**（§5.19 的系统提示段落），5.18 时它曾因"全文件没人用"被删过一次 |
+| **刻意没做的事**（防止后来者"顺手修好"） | ① 头像检查器**不**因扩展名不是小写 `.svg` 判失败（现有素材全小写，那是新规则不是缺陷）。② `@deepseek-ai/dsh-system-prompt` 保留在依赖里——**它现在是在用的**（§5.19 的系统提示段落），5.18 时它曾因"全文件没人用"被删过一次。③ 0.1.7 起 `Config.enabled` **已经**放宽成 `z.any()` 了（§5.21.2 第 2 条：schema 拒绝一个值的代价从"那块设置不可用"变成"整个插件不加载"），"不放宽"那条旧理由随之作废 |
+| **浏览器半边在 `0.1.7-rc.2` 上的真机表现** | **已实测（用户确认，2026-09-28）**：名册页渲染、搜索、`@` 触发菜单、卡片开关都正常（§5.21.10）。**仍未单独验证**：Remote 的真实 HTTP 路由（页面可用即间接可达），以及「查看提示词 / 复制提示词 / 自建专家编辑器」—— 这三个在 0.1.5 时代也没人碰过 |
+| **改 Host 代码要重启 DSH Desktop** | 不是缺陷也不是待办，是 0.1.7 的行为（§5.21.6）。浏览器半边仍然免刷新 |
 | 用户目前无法表达"模型可以用哪些专家" | `enabled` 只治理浏览器侧（`@` 菜单），4 个工具看**全部 279 位**（D17）。这是刻意的默认，用户 2026-09-14 明确表示**暂不需要**这个控制权；真要做，正确做法是**加一个独立字段**（`agentEnabled`），而不是让 `enabled` 在非空时兼职过滤工具——那会把"我不想在菜单里看到它"变成"禁止模型用它" |
 
 ## 10. 续工起点
 
-- 改 Host 逻辑 → `src/index.ts`（工具与 catalog）、`src/remote.ts`（Remote 方法）、`src/roster-settings.ts`（enabled 与自定义专家）
+- 改 Host 逻辑 → `src/index.ts`（Config + 工具 + 系统提示段 + 挂载 Remote）、`src/remote.ts`（Remote 方法）、`src/roster-settings.ts`（enabled 与自定义专家的读写契约）、`src/host-settings.ts`（读自己的设置投影与宿主界面语言）。**改完必须重启 DSH Desktop**（§5.21.6）
+- 动设置相关的东西之前先读 §5.21.2：0.1.7 的设置是**从本插件的 `Config` 派生**的，命名空间就是 profile 条目 id `agency-agents-ll`（= `contract.ts` 的 `SETTINGS_NS`）。要加一个可被浏览器改的字段，就得是 `.volatile()`；普通字段改动会重挂插件。**别再去找 `settings.installSection` / `settings.get`，0.1.7 里没有这两个东西**
 - 改浏览器端 → `src/client/index.ts`（页面与触发器）、`src/client/locales.ts`（词条，zh 为 key 集真源，en 由 `satisfies` 编译期强制一致）
 - 改浏览器端之后 → 必须跑 `pnpm exec vitest run src/client/index.test.ts`：这 **34 条**在 jsdom 里用**真实的 279 份资产**渲染真实组件，是唯一能在没有浏览器的情况下抓到「一次写入锁死整页」「连点被吞」「抛错变白屏」「滚动条一来自适应布局就跑偏」「data URI 里漏了个 `#` 转义」「引用 source 名与注册名不一致」「宿主重载后 revision 归零导致永久写不动」的地方。**新写这类断言时先在旧代码上跑一遍确认它会失败**，否则它只是装饰 —— 例如 §5.18 里那条"出厂名册 0 冲突"的断言在旧夹具下恒真，必须如实标注为空洞断言
 - 改资产或术语 → 动 `assets/`、`sync/glossary.json` 后必须跑 `pnpm sync:stamp && pnpm check`
 - **改头像素材** → 动 `assets/avatar/` 之后跑 `pnpm avatars:inline`（`typecheck` / `test` / `verify` 都会自动先跑，裸 `vitest` 由 `globalSetup` 兜住）。**`src/client/avatars.ts` 是生成文件，且不进 git —— 不要手改，也不要试图提交它**。素材树本身在本机、不在仓库里，**换台机器就没有头像**，这是刻意的
 - 改契约 → 先改 `docs/PLAN.md` 再改代码
+- **单包单行**（0.1.7 起）：`cordis.patch.yml` 只能有一行，Remote 服务由 `src/index.ts` 用 `ctx.plugin(AgencyAgentsRemote)` 挂载。**不要为了"服务必须在根 ctx 上"再拆一行** —— 那个顾虑在 0.1.7 上不成立（Cordis 的 `provide` 写根 store），而拆行的后果是浏览器模块表直接拒绝整个包（§5.21.1 第 3 条）。`pnpm verify` 有一条断言钉着行数
 - **UI 布局铁律**（在同一个 8px 上踩了三轮才收敛）：**先问「什么东西的尺寸在变」，而不是「哪个元素在动」**。设置面板的滚动区（`.options`，`overflow-y:auto`）在名册非空时有滚动条、清空时没有，**内容框宽度差 8px**（`--dsh-scrollbar-width: 8px`，实占不是覆盖式）。只要这个宽度会变，**任何占满宽度的东西都会抖** —— 卡片、简介折行、右锚定的按钮，全都会。所以现在的做法是**锁死宽度**，而不是逐个元素去躲：
   ```css
   .aall-section{ min-height:calc(100% + 1px) }        /* 滚动条永远画出来 */

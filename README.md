@@ -4,7 +4,7 @@ DeepSeek Harness 的**中英双语** The Agency 专家名册插件 —— 专家
 
 Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert names and introductions are Chinese; the persona prompt switches language.
 
-> 状态：**P0–P6 完成并已在 DSH 上运行**，279 位专家的中英文档案与 279 张专属头像全部通过机械门禁。各阶段的实测证据、尚未验证的路径与环境要点见 [`docs/STATUS.md`](docs/STATUS.md)。
+> 状态：**P0–P6 完成，已适配 DSH `0.1.7-rc.2`**，279 位专家的中英文档案与 279 张专属头像全部通过机械门禁。各阶段的实测证据、尚未验证的路径与环境要点见 [`docs/STATUS.md`](docs/STATUS.md)，0.1.7 这次适配的全部不兼容点与取证见其 §5.21。
 
 ## 它做什么
 
@@ -62,11 +62,13 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 ## 开发
 
-`node` / `npm` 可能不在 PATH；构建链可通过 DSH Desktop 自带的 runtime shim（Node v24.18.1 + pnpm 11.8.0）运行：
+**目标 DSH：`0.1.7-rc.2`。** 所有 `@deepseek-ai/*` 依赖都钉在这一条线上（`peerDependencies` 是运行时的真实契约，`devDependencies` 只用来 typecheck 与构建）；`@deepseek-ai/schemastery` 钉在 `~3.18.4`，因为 `.volatile()` 是这一版才有的。
+
+`node` / `npm` 可能不在 PATH；构建链可通过 DSH Desktop 自带的 runtime shim 运行：
 
 ```powershell
 pnpm install
-pnpm dev              # 开发用：watch 重建，DSH 会自动热重载（见下）
+pnpm dev              # 开发用：watch 重建客户端半边（Host 半边要重启，见下）
 pnpm build            # typecheck + tsdown：Host 半边 ESM，客户端半边 ModuleLoader CJS
 pnpm exec vitest run  # 单元测试（Host）+ 浏览器端组件测试（jsdom）
 pnpm verify           # 发布门禁（包结构、导出、双语 key 一致、分区名单一真源）
@@ -86,42 +88,48 @@ pnpm avatars:inline   # 由 assets/avatar 重新生成 src/client/avatars.ts（�
 
 ```powershell
 dsh plugin --profile desktop add ./dsh-agency-agents-ll
-dsh --profile desktop --dump-config    # 应看到 dsh-agency-agents-ll 这一层
+dsh --profile desktop --dump-config    # 应看到 dsh-agency-agents-ll 这一层（只有一行）
 ```
 
-### 改完代码怎么生效：不用重装，也不用重启
+### 改完代码怎么生效：客户端半自动，Host 半边要重启
 
-profile 以 **junction（目录符号链接）**指向本仓库，DSH 看到的就是仓库本身，**不存在"安装/更新"这一步**。而 DSH 默认开着两个热重载机制：
+profile 以 **junction（目录符号链接）**指向本仓库，DSH 看到的就是仓库本身，**不存在"安装/更新"这一步**。但两个半边的加载机制在 0.1.7 里不一样：
 
-| 半边 | 机制 | 行为 |
+| 半边 | 机制 | 改代码之后 |
 |---|---|---|
-| Host（`lib/index.js`，4 个工具与 Remote 服务） | `@deepseek-ai/cordis-plugin-hmr` | 文件变化后重载插件 |
-| 浏览器（`lib/client.js`，名册页与输入栏按钮） | `@deepseek-ai/dsh-client-hmr` | 每 500ms 轮询 bundle，**原地热替换，无需刷新页面** |
+| 浏览器（`lib/client.js`，名册页与输入栏按钮） | `@deepseek-ai/dsh-client-hmr`，每 500ms 轮询 bundle | **原地热替换，不用刷新页面**，也不用重启 |
+| Host（`lib/index.js`，4 个工具与 Remote 服务） | 模块级 HMR **需要宿主以 `--expose-internals` 启动**，而桌面版没带这个开关 | **必须重启 DSH Desktop**；改 profile 配置只会让 Loader 重新执行已经缓存的旧模块 |
 
-所以只要让 `lib/` 保持最新就够了 —— **开着 `pnpm dev`**（tsdown watch），保存源码后：
+所以：
 
 ```
-改源码  →  tsdown 自动重建  →  DSH 自动热重载两半  →  界面上直接看到
+改 src/client/**  →  tsdown 重建  →  浏览器轮询到新 bundle  →  界面上直接看到
+改 src/*.ts（Host 等） → tsdown 重建  →  重启 DSH Desktop  →  生效
 ```
 
-一次也不用刷新、重装或重启。实测：改一行 `src/client/index.ts`，`lib/client.js` 约 4 秒后重建完成。
+**实测依据**：`lib/client.js` 重建后渲染进程在 1 秒内取走新 bundle（缓存文件 mtime 与构建时间一致）；而 `lib/index.js` 重建后，无论等多久、或改 profile 的 `cordis.patch.yml` 逼 Loader 重新挂载，日志里跑的都还是旧模块（堆栈仍指向旧行号）。0.1.7 的 `dsh-hmr` 在 `root` 非空时会直接抛 `--expose-internals is required for module HMR`，`dsh-base` 给它的默认又是 `root: []`，所以桌面版事实上没有 Host 模块热重载。**旧文档里「改完不用重启」的承诺在 0.1.7 上不成立。**
+
+`pnpm dev` 仍然有用：它让客户端半边保持最新（`tsdown --watch`），Host 改动则攒到下次重启一起生效。
 
 **两个注意**：热替换会**丢掉被重载插件内的 React 状态**（比如正在编辑的自定义专家草稿）；`pnpm dev` 不跑 typecheck，提交前仍要 `pnpm build`。
 
 ## 目录
 
 ```
-sync/            上游同步、机械门禁、术语表与 manifest
-assets/en/       英文上游快照，逐字节同步，不手改
-assets/zh/       中文档案：名 + 一句话简介 + 中文简介（+ 可选正文）
-src/contract.ts  两端共享的常量与纯函数
-src/names.ts     18 个分区的中英显示名（分区名的唯一真源）
-src/i18n.ts      Host 文案
-src/catalog.ts   名册索引与名称解析
-src/persona.ts   按语言读取正文并回退
-src/index.ts     Host：4 个工具（list_experts / describe_expert / summon_expert / summon_experts）
-src/client/      浏览器：名册页与输入框触发器
-docs/PLAN.md     实施规格（契约）
+sync/                上游同步、机械门禁、术语表与 manifest
+assets/en/           英文上游快照，逐字节同步，不手改
+assets/zh/           中文档案：名 + 一句话简介 + 中文简介（+ 可选正文）
+src/contract.ts      两端共享的常量与纯函数
+src/names.ts         18 个分区的中英显示名（分区名的唯一真源）
+src/i18n.ts          Host 文案
+src/catalog.ts       名册索引与名称解析
+src/persona.ts       按语言读取正文并回退
+src/host-settings.ts Host 读自己的设置投影与宿主界面语言
+src/roster-settings.ts 启用集合与自建专家的读写契约（纯逻辑）
+src/index.ts         Host：Config + 4 个工具 + 系统提示段；在这里挂载 Remote 半边
+src/remote.ts        Host：Typert Remote 服务（同包内的子插件，不是独立行）
+src/client/          浏览器：名册页与输入框触发器
+docs/PLAN.md         实施规格（契约）
 ```
 
 完整的决策表、内容模型与阶段验收见 **[`docs/PLAN.md`](docs/PLAN.md)**。

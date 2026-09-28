@@ -147,11 +147,12 @@ dsh-agency-agents-ll/
 │  ├─ i18n.ts             Host 文案（zh 为 key 集真相源，en 用 satisfies 校验）
 │  ├─ catalog.ts          扫描两棵树、解析 frontmatter、名称解析
 │  ├─ persona.ts          按语言读取 persona 正文并回退
-│  ├─ index.ts            Host：catalog + 4 个工具 + installSection
+│  ├─ host-settings.ts    Host 读自己的设置投影（describe）与宿主界面语言
+│  ├─ index.ts            Host：Config + catalog + 4 个工具 + 系统提示段 + 挂载 remote
 │  ├─ index.test.ts       vitest
 │  ├─ roster-settings.ts  enabled 列表与自定义专家（settings 支撑，revision fencing）
 │  ├─ expert-contract.ts  自定义专家的 zod 契约
-│  ├─ remote.ts           Typert Remote 服务（浏览器读取名册的唯一通道）
+│  ├─ remote.ts           Typert Remote 服务（同包内的子插件，由 index.ts 挂载）
 │  ├─ remote-contract.ts  Host/Client 共用的方法描述符表
 │  ├─ remote.test.ts      vitest
 │  └─ client/             浏览器半边
@@ -189,7 +190,7 @@ dsh-agency-agents-ll/
 | **P1 数据管线** | `sync.mjs` + `checks.mjs` + `glossary.json` + manifest | 已完成：manifest 覆盖 279；英文侧 279/279 逐字节对齐上游；连跑三次幂等 |
 | **P2 中文档案** | 279 份中文名 + 一句话简介 + **中文简介** | 已完成：279/279 `aligned`，0 suspect，0 missing；6 份另带完整中文正文 |
 | **P3 Host 功能** | catalog、4 个工具（`list_experts` / `describe_expert` / `summon_expert` / `summon_experts`）、语言解析 | 已完成：24 项 vitest 覆盖语言解析、名册合并、简介读取、名称解析、persona 回退与请求校验 |
-| **P4 客户端** | 名册页、启用停用、简介展示、提示词查看复制、自定义专家编辑器、`@` 触发、Host Remote 服务 | 已完成：`--dump-config` 见主行与 remote 行；30 项 verify 通过；用户在浏览器验收 |
+| **P4 客户端** | 名册页、启用停用、简介展示、提示词查看复制、自定义专家编辑器、`@` 触发、Host Remote 服务 | 已完成：`--dump-config` 见单一行；35 项 verify 通过；用户在浏览器验收 |
 | **P5 发布** | 双语 README、tag | 只差打 tag |
 
 各阶段的实测证据、尚未验证的路径与续工方式见 **[`STATUS.md`](STATUS.md)**。

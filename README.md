@@ -4,7 +4,7 @@ DeepSeek Harness 的**中英双语** The Agency 专家名册插件 —— 专家
 
 Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert names and introductions are Chinese; the persona prompt switches language.
 
-> 状态：**P0–P6 完成，已适配 DSH `0.1.7-rc.2`**，279 位专家的中英文档案与 279 张专属头像全部通过机械门禁。各阶段的实测证据、尚未验证的路径与环境要点见 [`docs/STATUS.md`](docs/STATUS.md)，0.1.7 这次适配的全部不兼容点与取证见其 §5.21。
+> 状态：**P0–P6 完成，已适配 DSH `0.2.0-rc.2`**（Host 半边真机验证通过；浏览器半边待重启桌面 app 复验），279 位专家的中英文档案与 279 张专属头像全部通过机械门禁。各阶段的实测证据、尚未验证的路径与环境要点见 [`docs/STATUS.md`](docs/STATUS.md)：`0.2.0` 这次（版本闸门）见其 §5.22，`0.1.7` 那次（三条代码级不兼容）见其 §5.21。
 
 ## 它做什么
 
@@ -62,7 +62,11 @@ Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert na
 
 ## 开发
 
-**目标 DSH：`0.1.7-rc.2`。** 所有 `@deepseek-ai/*` 依赖都钉在这一条线上（`peerDependencies` 是运行时的真实契约，`devDependencies` 只用来 typecheck 与构建）；`@deepseek-ai/schemastery` 钉在 `~3.18.4`，因为 `.volatile()` 是这一版才有的。
+**目标 DSH：`0.2.0-rc.2`。** `peerDependencies` 里的 15 个 `@deepseek-ai/dsh-*` 写成**范围** `>=0.1.7-rc.2 <0.3.0-0`（`peerDependencies` 是运行时的真实契约），`devDependencies` 才是钉在当前线上、只用来 typecheck 与构建的那一份（现在全是 `0.2.0-rc.2`）。
+
+> **为什么 peer 必须是范围，不能钉精确版本**：DSH `0.2.0` 起有一道**加载前的版本闸门** —— 声明的范围不覆盖实际运行版本，这个插件行就被**整个禁用**（宿主日志里连一条本插件的记录都没有，因为代码一行没跑），症状是 4 个工具与设置页一起消失。全部取证与两条出路见 [`docs/STATUS.md`](docs/STATUS.md) §5.22；`pnpm verify` 有两条断言钉着"必须是范围、且 15 个用同一个范围"。
+
+`@deepseek-ai/schemastery` 钉在 `~3.18.4`，因为 `.volatile()` 是这一版才有的（设置里可被浏览器改写的字段必须是 `.volatile()`）。
 
 `node` / `npm` 可能不在 PATH；构建链可通过 DSH Desktop 自带的 runtime shim 运行：
 
@@ -88,12 +92,14 @@ pnpm avatars:inline   # 由 assets/avatar 重新生成 src/client/avatars.ts（�
 
 ```powershell
 dsh plugin --profile desktop add ./dsh-agency-agents-ll
-dsh --profile desktop --dump-config    # 应看到 dsh-agency-agents-ll 这一层（只有一行）
+dsh plugin --profile desktop version-exemptions   # 0.2.0 的版本豁免表，正常应为 {}
 ```
+
+> `desktop` 是 Electron 保留的 profile：**插件管理可以**走 CLI（`plugin` 子命令），但**启动与 `--dump-config` 会被拒** —— `error: profile "desktop" is managed exclusively by the Electron application`。想看组合后的配置，用 `--profile headless` / `lltest` 再加 `--patch` 覆盖层。
 
 ### 改完代码怎么生效：客户端半自动，Host 半边要重启
 
-profile 以 **junction（目录符号链接）**指向本仓库，DSH 看到的就是仓库本身，**不存在"安装/更新"这一步**。但两个半边的加载机制在 0.1.7 里不一样：
+profile 以 **junction（目录符号链接）**指向本仓库，DSH 看到的就是仓库本身，**不存在"安装/更新"这一步**。但两个半边的加载机制不一样（0.1.7 起如此，0.2.0 未变）：
 
 | 半边 | 机制 | 改代码之后 |
 |---|---|---|
@@ -107,7 +113,7 @@ profile 以 **junction（目录符号链接）**指向本仓库，DSH 看到的�
 改 src/*.ts（Host 等） → tsdown 重建  →  重启 DSH Desktop  →  生效
 ```
 
-**实测依据**：`lib/client.js` 重建后渲染进程在 1 秒内取走新 bundle（缓存文件 mtime 与构建时间一致）；而 `lib/index.js` 重建后，无论等多久、或改 profile 的 `cordis.patch.yml` 逼 Loader 重新挂载，日志里跑的都还是旧模块（堆栈仍指向旧行号）。0.1.7 的 `dsh-hmr` 在 `root` 非空时会直接抛 `--expose-internals is required for module HMR`，`dsh-base` 给它的默认又是 `root: []`，所以桌面版事实上没有 Host 模块热重载。**旧文档里「改完不用重启」的承诺在 0.1.7 上不成立。**
+**实测依据**：`lib/client.js` 重建后渲染进程在 1 秒内取走新 bundle（缓存文件 mtime 与构建时间一致）；而 `lib/index.js` 重建后，无论等多久、或改 profile 的 `cordis.patch.yml` 逼 Loader 重新挂载，日志里跑的都还是旧模块（堆栈仍指向旧行号）。0.1.7 的 `dsh-hmr` 在 `root` 非空时会直接抛 `--expose-internals is required for module HMR`，`dsh-base` 给它的默认又是 `root: []`，所以桌面版事实上没有 Host 模块热重载。**旧文档里「改完不用重启」的承诺从 0.1.7 起不成立，0.2.0 同样。**（另：0.2.0 起 CLI 连 `--profile desktop` 的启动都直接拒绝，见上。）
 
 `pnpm dev` 仍然有用：它让客户端半边保持最新（`tsdown --watch`），Host 改动则攒到下次重启一起生效。
 

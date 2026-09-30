@@ -31,6 +31,8 @@
 | D17 | 工具面与 `enabled` 的关系 | 4 个工具面向**完整名册** = 出厂 279 位 **+ 用户自建专家**；`enabled` **只治理浏览器侧**（`@` 触发菜单与 lexicon），**不过滤任何工具**。理由：`enabled` 的工厂默认是 `[]`，若拿它过滤工具，全新安装时 `list_experts` 会返回 0 位专家，而「279 位可浏览」正是这个插件的价值。反过来，自建专家**必须**能被工具召唤（名册合并视图 + 统一的 persona 出口），这是 D9 的前置条件 |
 | D18 | 用户态数据不得被静默改写 | 读取路径（`catalog()` / 快照投影）**只做展示**，不允许剔除用户在设置文档里存过的 `enabled` 项；一次普通的开关写入不得删除用户没碰过的 slug；写入也不得顺手清掉本版本读不出的自定义专家条目（读取可以降级，写入绝不丢数据）。名字歧义影响的是「按名字解析」，不是「这个 slug 存不存在」——所以**冲突不禁用卡片开关**（禁用会把一位已启用的专家困成"勾着、点不动"），只由徽章说明、并由 `@` 候选拒绝（mention 只带名字，放进去等于生成一个注定解析失败的引用） |
 
+| D19 | DSH peer 依赖必须是**范围** | 15 个 `@deepseek-ai/dsh-*` 的 `peerDependencies` 一律写成范围（现为 `>=0.1.7-rc.2 <0.3.0-0`），**不许钉精确版本**。理由：DSH `0.2.0` 起有一道**加载前的版本闸门** —— 声明的范围不覆盖运行版本，这个插件行就被**整个禁用**，宿主日志里连一条本插件的记录都没有（代码一行没跑），症状是 4 个工具与设置页一起消失。`devDependencies` 才钉当前线（`0.2.0-rc.2`），只用于 typecheck 与构建。`pnpm verify` 有两条断言强制「是范围」与「15 个同范围」。取证见 `STATUS.md` §5.22 |
+
 ## 3. 内容模型
 
 名册总量 **279 个专家 / 18 个分区**，完全等于英文上游的正式分区集合。
@@ -174,9 +176,10 @@ dsh-agency-agents-ll/
 - `package.json` 的 `dsh.bundle.patch` → `cordis.patch.yml`；profile 列出的 bundle 层按顺序叠加。
 - 装载顺序：`@deepseek-ai/dsh-base` → profile 的 `bundles` → profile 的 `cordis.patch.yml` → `$DSH_HOME/cordis.patch.yml` → `--patch`。后层按行覆盖，**patch 替换整行 config，不深合并**。
 - 客户端半边由客户端模块系统按 `dsh.client` 扫描并注入页面，**不需要重建 Web 应用**。
-- 客户端产物必须是 `window.__ModuleLoader__.load({ id, factory })` 包装的 CJS，平台冻结模块保持 external（`react` / `react-dom` / `@deepseek-ai/cordis` / `ui-slots` / `ui-primitives` / `client-web-react` / `schema-input` / `ui-attachment`）。
+- 客户端产物必须是 `window.__ModuleLoader__.load({ id, factory })` 包装的 CJS，**平台冻结模块**保持 external。这张表由宿主前端 bundle 里的种子构造函数决定，**必须逐字对齐**（0.2.0 实测仍是：`react` / `react/jsx-runtime` / `react-dom` / `react-dom/client` / `@deepseek-ai/cordis` / `@deepseek-ai/dsh-client-store` / `@deepseek-ai/dsh-client-ui-slots` / `@deepseek-ai/dsh-client-ui-primitives` / `@deepseek-ai/dsh-client-ui-dockkit`）。仓库里有两份副本要一起改：`tsdown.config.ts` 的 `PLATFORM_MODULES` 与 `scripts/verify.mjs` 的同名表（门禁断言 bundle 请求的 external 只在这张表里）。
 - 设置页由插件自己的客户端注册到 `settings.section`（独立导航页）或 `settings.plugin.item`（插件配置卡片）。
 - 本地安装：`dsh plugin --profile desktop add ./dsh-agency-agents-ll`。
+- **装载前还有一道版本闸门（`0.2.0` 起）**：宿主拿运行版本（`dsh --version`，即 `@deepseek-ai/dsh-app-boot` 的版本）与插件声明的 `@deepseek-ai/dsh*` peer 范围比对，只检查名字为 `@deepseek-ai/dsh` 或以 `@deepseek-ai/dsh-` 开头的 peer（`cordis` / `schemastery` / `react` / `zod` 不参与）。不覆盖就**禁用该行**，并且在安装期与启动期各报一次。豁免是 profile 级元数据：`<profileDir>/compatibility.json`，由 `dsh plugin --profile <p> allow-version <pkg@ver> --dsh-version <ver> --accept-risk` 写入 —— **清单和 cordis patch 都带不了豁免**。见 D19。
 - **`dsh.client.inject` 是「必须先挂载的客户端模块」清单，不是类型清单。** 列进一个宿主没有的模块，会让浏览器半边**永不激活**。所以：
   - 列进去的每一项都必须是 `peerDependencies` 里的运行时依赖（`pnpm verify` 强制）。
   - 只为声明合并而引入的包（`import type {} from '...'`，编译后被擦除）放 `devDependencies`，**不列入 inject**。
@@ -190,7 +193,7 @@ dsh-agency-agents-ll/
 | **P1 数据管线** | `sync.mjs` + `checks.mjs` + `glossary.json` + manifest | 已完成：manifest 覆盖 279；英文侧 279/279 逐字节对齐上游；连跑三次幂等 |
 | **P2 中文档案** | 279 份中文名 + 一句话简介 + **中文简介** | 已完成：279/279 `aligned`，0 suspect，0 missing；6 份另带完整中文正文 |
 | **P3 Host 功能** | catalog、4 个工具（`list_experts` / `describe_expert` / `summon_expert` / `summon_experts`）、语言解析 | 已完成：24 项 vitest 覆盖语言解析、名册合并、简介读取、名称解析、persona 回退与请求校验 |
-| **P4 客户端** | 名册页、启用停用、简介展示、提示词查看复制、自定义专家编辑器、`@` 触发、Host Remote 服务 | 已完成：`--dump-config` 见单一行；35 项 verify 通过；用户在浏览器验收 |
+| **P4 客户端** | 名册页、启用停用、简介展示、提示词查看复制、自定义专家编辑器、`@` 触发、Host Remote 服务 | 已完成：`--dump-config` 见单一行；37 项 verify 通过；用户在浏览器验收 |
 | **P5 发布** | 双语 README、tag | 只差打 tag |
 
 各阶段的实测证据、尚未验证的路径与续工方式见 **[`STATUS.md`](STATUS.md)**。

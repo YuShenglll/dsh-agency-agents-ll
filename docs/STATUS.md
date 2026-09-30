@@ -6,9 +6,14 @@
 
 插件已建成并**在 desktop profile 上运行**：DeepSeek Harness 的中英双语 Agency 专家名册，279 位专家 / 18 个分区，中文名与中文简介齐备，提示词语言可切换，Host 工具与浏览器端均可用。**系统提示里也会告诉模型名册存在**，并写明「只在用户明确要求时才召唤」（见 §5.19）。
 
+> **2026-10-01：已适配 DSH `0.2.0-rc.2`**（此前钉在 `0.1.7-rc.2`）。这一轮**变的是宿主规则，不是契约**：0.2.0 新增一道**加载前的版本闸门** —— 声明的 DSH peer 范围不覆盖运行版本，就把这一行**整个禁用**（宿主日志里连一条本插件的记录都没有，因为代码一行没跑）。根因是本插件把 15 个 DSH peer 钉成了精确版本 `0.1.7-rc.2`。**修法只动清单**：peer 改成范围 `>=0.1.7-rc.2 <0.3.0-0`、devDeps 升到 `0.2.0-rc.2`（`src/` 一行未改，重建产物同尺寸），并给 `pnpm verify` 加了两条"必须是范围"的断言。取证、闸门源码、两条出路与验证见 **§5.22**。
+> **代价**：0.1.7 的桌面版**没有 Host 模块热重载**（§5.21.6），改 Host 代码必须重启 DSH Desktop —— 这一条在 0.2.0 上同样成立。
+
 > **2026-09-28：已适配 DSH `0.1.7-rc.2`**（此前钉在 `0.1.5-rc.2`）。三条会让插件整体不加载的硬不兼容已修掉，并补上两条会导致浏览器半边失效的契约变化 —— 全部取证、修法与验证见 **§5.21**；重启 desktop app 后 Host 路径已复测通过（§5.21.10）。
 > **代价**：0.1.7 的桌面版**没有 Host 模块热重载**，改 Host 代码必须重启 DSH Desktop（§5.21.6）。旧文档里「改完不用重启」的承诺从这一版起不成立。
 > **升级副作用（已处理）**：harness 的设置迁移没能把本插件的 section 导进来，用户此前启用的 **6 位专家一度全部丢失**。数据一直在 `%DSH_HOME%\settings.yaml.imported`（改名而非删除），已写回 profile patch 恢复 —— 原因、证据与恢复步骤见 **§5.21.12**。**那个 `.imported` 文件是本机唯一的一份，不要删。**
+
+> **还没实测的（0.2.0 这一轮）**：**只有一件 —— 浏览器半边。** Host 侧已在 `0.2.0-rc.2` 上用 `headless` profile + 覆盖层跑通（§5.22.5，**没用任何豁免**）。浏览器半边必须重启 DSH Desktop 才能验收：0.2.0 的 `dsh` README 写明 `desktop` 是 Electron 保留的 profile，CLI 拒绝为它启动或导出配置。
 
 > **还没实测的（0.1.7 这一轮）**：**清单空了。** Host 侧（日志无错 + 4 个工具路径）与浏览器侧**全部**在 `0.1.7-rc.2` 的 desktop profile 上实测通过 —— 名册页渲染、搜索、`@` 触发菜单、卡片开关、**查看提示词、复制提示词、自建专家编辑器**（用户逐个确认，见 §5.21.10）。唯一仍只有间接证据的是 Remote 的真实 HTTP 路由（页面可用即证明可达），这一条从 0.1.5 起就是同样的状态。
 
@@ -32,12 +37,12 @@
 | P5 发布 | ⏳ | 只差打 tag。**四条工具路径已全部真跑过**（见第 3 节），可以打了 |
 | P6 头像 | ✅ | 279/279 交付、校验、接入（见 5.10）。`verify` 三条门禁钉住一致性；明暗主题均已真机确认 |
 
-**门禁现状（2026-09-28，DSH `0.1.7-rc.2`；含 §5.21 的适配；HEAD 见 `git log`）**：
+**门禁现状（2026-10-01，DSH `0.2.0-rc.2`；含 §5.21 / §5.22 两轮适配；HEAD 见 `git log`）**：
 
 ```
 pnpm build   exit=0      （typecheck：avatars:inline + 两份 tsconfig；然后 tsdown）
 pnpm test    108 passed  （roster-settings 17 + remote 16 + host 41 + client/jsdom 34）
-pnpm verify  exit=0      35 项
+pnpm verify  exit=0      37 项
 pnpm check   exit=0      13 项，roster 279 / aligned 279 / suspect 0 / missing 0
 pnpm authoring exit=0    0 项待办
 ```
@@ -91,6 +96,8 @@ describe_expert(上线就绪度评审专家)
 ## 4. 尚未实测的路径
 
 诚实清单，别当成已验证。**四条工具路径已全部真跑过**；浏览器端在 0.1.5 之后**又在 0.1.7 上整条复测了一遍**（§5.21.10）。下表是 0.1.5 那一轮的原始记录，0.1.7 的结论见最后一列：
+
+> **2026-10-01（DSH `0.2.0-rc.2`）追加一行状态**：Host 侧 4 个工具路径在 `headless` profile + 覆盖层上真跑过（§5.22.5，**不带任何豁免**）；**浏览器侧那一整列还没有在 0.2.0 上复测** —— 客户端四处契约逐条核对过都没变，但"核对过"不等于"跑过"，重启 desktop app 后由用户确认。
 
 | 项 | 状态（0.1.5） | 0.1.7 复测 |
 |---|---|---|
@@ -990,8 +997,79 @@ agency-agents-ll:
 
 **教训**：`importLegacyDocument` 只在「目标条目当时已有 volatile 字段」时成功；失败既非致命也非显式（一条 WARN 而已）。所以升级 SDK 前后要做的核对是：**看一眼 `settings.yaml.imported` 里还有哪些 section** —— 尤其是带用户数据（启用列表、自建内容、偏好）的那些。这台机器上它是唯一的一份，**不要删**。
 
+## 5.22 DSH `0.2.0-rc.2` 适配（2026-10-01）
+
+### 5.22.1 症状不是代码错，而是**加载前的版本闸门**
+
+DSH 升到 `0.2.0-rc.2` 后插件整体消失（4 个工具、设置页全无），但**宿主日志里没有一条本插件的记录** —— 因为插件的代码一行都没跑。决定性证据在插件管理器自己的日志里：
+
+`%DSH_HOME%\profiles\desktop\.plugin-manager\logs\operation-bCMCGY\pnpm.log`（2026-10-01 00:09:43）：
+
+```
+Packages: +1 -27
+dsh: warning: Plugin dsh-agency-agents-ll@0.1.0 is incompatible with dsh 0.2.0-rc.2:
+peerDependencies {"@deepseek-ai/dsh-api-remotes":"0.1.7-rc.2", …}. Running it may cause
+crashes or data loss. Update the plugin or install a plugin version compatible with this
+dsh runtime. … Exact-version exemption: not active.
+dsh: it stays installed but profile startup denies it until you grant an exemption for those exact versions.
+```
+
+**根因**：本插件的 15 个 `@deepseek-ai/dsh-*` peerDependencies 钉的是**精确版本** `0.1.7-rc.2`，而宿主是 `0.2.0-rc.2`，兼容性判定直接把这一行**禁用**。这是 0.2.0 新增的行为（0.1.7 及以前没有这道闸门），**与 §5.21 那三条代码级不兼容是两回事**。
+
+### 5.22.2 闸门长什么样（源码取证）
+
+`app.asar` 内 `dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js`（区域 `lib/types/plugin-compatibility.js`）：
+
+- `evaluatePluginCompatibility(manifest, exemptions = {}, runtimeVersion = getDshRuntimeVersion())` —— **只看名字恰好是 `@deepseek-ai/dsh` 或以 `@deepseek-ai/dsh-` 开头的 peer**。所以 `@deepseek-ai/cordis`、`schemastery`、`react`、`zod` 永远不参与判定，**只有那 15 个 DSH 包会触发闸门**。
+- `workspace:^` / `workspace:~` / `workspace:*` 等价于运行版本；判定不兼容的条件是 `requirement.trim() === "" || !semver.satisfies(runtimeVersion, requirement, { includePrerelease: true })`。
+- `getDshRuntimeVersion()` 读的是 **app-boot 自己的 `package.json` 版本**（实测 = `0.2.0-rc.2`，也就是 `dsh --version` 的输出）。
+- 豁免文件是 `<profileDir>/compatibility.json`，格式 `{"<精确 pkg@version>": ["<精确 DSH 版本>", …]}`，由 `setProfileVersionExemption(...)` 在 `withFileLock` + `writeFileAtomic(…, { mode: 384 })` 下写；源码注释写明 *"Independent profile metadata; neither package manifests nor Cordis patches carry grants."*
+- 豁免的官方入口（`dsh-plugin-manager` README）：`dsh plugin --profile <p> version-exemptions` / `allow-version <pkg@version> --dsh-version <runtime> --accept-risk` / `revoke-version …`；拒绝码 `incompatible-version`。
+
+**顺手闭掉的一条捷径**：`--patch <overlay>` 覆盖层**不能**绕过闸门。即使把行改成 `name: file:///…/lib/index.js`，闸门仍会向上找到最近的 `package.json` 判定，打印 `dsh: disabling profile plugin row "agency-agents-ll": …`，模型侧看到的就是「工具不存在」。**放宽 peer 范围是所有后续验证的前置条件**，不是可选项。
+
+### 5.22.3 两条出路与本次的选择
+
+| | 做法 | 代价 |
+|---|---|---|
+| **A（已采用）** | 把 peer 写成**范围** `>=0.1.7-rc.2 <0.3.0-0` | 后续 0.2.x / 0.1.7+ 升级不再被闸门拒绝；代价是范围里的未测版本会被放行，靠 `pnpm verify` + 真机复测兜 |
+| B | 保留精确钉死 + `dsh plugin … allow-version … --accept-risk` 逐个版本豁免 | 每次升级都要人工豁免，且运行时明确警告 "may cause crashes or data loss" |
+
+B 在本机实测可用（先在 `headless` profile 上授予，`compatibility.json` 变成 `{"dsh-agency-agents-ll@0.1.0": ["0.2.0-rc.2"]}`），**验证完已撤销**，回到 `{}`。desktop profile 从未授予任何豁免，其 `compatibility.json` **不存在**。
+
+### 5.22.4 改了什么：只有清单，源码零改动
+
+- 15 个 DSH peer：`"0.1.7-rc.2"` → `">=0.1.7-rc.2 <0.3.0-0"`（下限 = 上一轮真机实测过的版本，上限 `<0.3.0-0` 明确排除 0.3 线含预发布）。
+- devDependencies：`@deepseek-ai/*` 全部 `0.1.7-rc.2` → `0.2.0-rc.2`；`@deepseek-ai/cordis` `^4.0.2` → `^4.0.4`。`schemastery ~3.18.4`、`react ^18.2.0`、`zod ^4.4.3` 未动。
+- `scripts/verify.mjs` 新增两条机械断言：**「DSH peer 依赖声明为范围而不是精确版本」**与**「所有 DSH peer 使用同一个范围」**。理由写在注释里：一条精确钉死就会让每次 DSH 升级变成一行永不加载的插件。
+- **`src/` 一行未改**，重新构建出的产物与 0.1.7 期同尺寸（`lib/index.js` 80.70 kB、`lib/client.js` 634.34 kB）。**这次的破坏面完全在清单层**。
+
+### 5.22.5 怎么验证的
+
+- 门禁：`tsc --noEmit` ×2 exit=0、`tsdown` exit=0、vitest **108 passed**、`pnpm verify` **37 项**、`pnpm check` **13 项**（roster 279 / aligned 279 / suspect 0 / missing 0）。
+- **真机端到端（Host 半边，`0.2.0-rc.2`，不带任何豁免）**：`dsh --profile headless --patch <overlay.yml> "只调用一次 list_experts（division=research）…"` → 模型逐字返回 `研究（1）` 与 `🔍 研究综合专家 —— 文献综述与证据综合专家，把零散来源整理成如实加权的证据图谱。`，**输出里没有任何 incompatibility 警告**。这同时证明 §5.21 修掉的三条代码级不兼容在 0.2.0 上没有复现。
+- **客户端半边逐条核对（0.2.0 源码/README）**：`ctx.remote.$mount`（`dsh-api-gateway/lib/client.js`，语义与签名不变，每个命名空间是 `remote.<namespace>` 子 Service，最后一个方法撤销后卸载）、`remoteServiceKey(ns) = 'remote.' + ns`、`ctx.slots.inject(key, callback)`（`dsh-client-ui-renderer/lib/client.js`，callback 返回一个或一组 disposer）、`ctx.configForms.get(entryId)` —— **四处都没变**。
+- **平台冻结模块表逐字未变**：`dsh-web-frontend` 的 `staticModules` 仍是 react / react/jsx-runtime / react-dom / react-dom/client / `@deepseek-ai/cordis` / `dsh-client-store` / `dsh-client-ui-slots` / `dsh-client-ui-primitives` / `dsh-client-ui-dockkit`，故 `tsdown.config.ts` 的 `PLATFORM_MODULES` 与 verify 里的同名表都不用改。
+
+### 5.22.6 取证方法：给 `app.asar` 写一个只读读取器
+
+新版把宿主打包成 `resources\app.asar`（121 MB），`read` 工具直接读 asar 内路径会失败（`Error: Cannot mix BigInt and other types`）。临时工具在 `.tmp020\`（不进版本库）：`asar.mjs`（`list` / `cat` / `dump <regex> <outDir>`）、`grep.mjs`（在 asar 原始字节里搜字符串并把命中归属到具体文件）、`slice.mjs`、`dbg.mjs`。
+
+- asar 头部实测：字节 0..3 = `04 00 00 00`，**JSON 头从偏移 16 开始**（`u32@12` = 头长度 3392048），内容基址 = 3392064，`entry.offset` 相对该基址。
+- asar 内 `@deepseek-ai/*` 共 **289 个包，一个 `.d.ts` 都没有**，但**每个包都带 `README.md`** —— 契约文本的唯一来源（已 dump 285 份到 `.tmp020/readme/`，文件名形如 `dsh-client-ui-settings__README.md`）。**下次再遇到"契约变了没"的问题，先读这些 README，不要硬啃压缩后的 JS。**
+
+### 5.22.7 还没验证的
+
+**浏览器半边**（名册页、`@` 菜单、卡片开关、设置页、弹窗）只能在真实的 desktop profile 上验收 —— 0.2.0 的 `dsh` README 明确写了 *"The `desktop` name is reserved for the Electron-owned profile, so the CLI rejects boot and config-dump requests for it."*，所以**必须由用户重启 DSH Desktop**。CLI 侧的结论只覆盖 Host 半边。
+
 ## 6. 环境要点（重开会话必读）
 
+- **2026-10-01：DSH 换了安装形态，路径全变了。** 新装在 `C:\Users\LL\AppData\Local\Programs\DeepSeek Harness\`（`DeepSeek Harness.exe` + `resources\app.asar` 121 MB，宿主代码在 asar 内的 `dsh\` 下）；用户数据仍在 `%DSH_HOME%` = `C:\Users\LL\.dsh`。
+  - **CLI**：`C:\Users\LL\AppData\Local\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd`（内部已 `set ELECTRON_RUN_AS_NODE=1` 并自带 `--expose-internals`；真身是 `app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\cli.js`）。`dsh --version` = `0.2.0-rc.2`。`dsh <profile> "任务"` = 跑一个会话、打印结果、退出 —— **真机端到端验证用这个**。`--patch <yml>` 可重复，在 profile 层之后应用。
+  - **pnpm**：`…\resources\runtime\pnpm\bin\pnpm.mjs`（11.8.0），用 `& $node <pnpm.mjs> install --config.minimumReleaseAge=0` 调用；`node` 可用自带的 24.18.1 或本机 `C:\Users\LL\AppData\Local\Programs\nodejs\node.exe`（v24.21.0）。
+  - **`desktop` 是 Electron 保留的 profile**：`dsh` **拒绝**为它启动或导出配置（*"The desktop name is reserved for the Electron-owned profile"*），插件管理请求也只有 Desktop 自带的命令能发。**所以 desktop 上的验收只能靠用户重启桌面 app**，CLI 侧只能用 `headless` / `lltest`。
+  - 旧安装 `G:\deepseek harness\DSH Desktop\`（`dsh-plugin-desktop 2.0.15`，0.1.7 线）**还在**；本文档 §5.21 及更早提到的路径都是它，**别拿旧路径去新装里找东西**。
+- **宿主日志的位置也跟着换了。** `%APPDATA%\DSH Desktop\logs\host\` 属于旧装；新装的用户数据目录 `C:\Users\LL\AppData\Roaming\@deepseek-ai\dsh-desktop\` **不写宿主日志**。0.2.0 这一轮是靠**插件管理器自己的日志**取证的：`%DSH_HOME%\profiles\<profile>\.plugin-manager\logs\<operation>\pnpm.log`（§5.22.1）。**插件"整个消失"且宿主日志无记录时，先去这里看。**
 - **`core.autocrlf = true`（系统级 gitconfig 的默认值）会把 checkout 出来的文件写成 CRLF，而 `git status` 看不出来。** 见 5.16。`assets/en`、`assets/zh` 已用 `.gitattributes` 钉成 `-text`，但**其它文件仍会被转换** —— 今后任何「对字节有契约」的新目录都要一起钉住。要判断磁盘真实字节就用 `[System.IO.File]::ReadAllBytes`，别问 git。另外 `git checkout -- <file>` 对 git 认为「干净」的文件是**空操作**（这正是当时没能把它改回来的原因），要强制重写必须先删掉再 checkout，或者用 `-c core.autocrlf=false`。
 - **`node` / `npm` 不在 PATH。**（2026-09-28 更新：本机现在**有**真的 `C:\Users\LL\AppData\Local\Programs\nodejs\node.exe`（v24.21.0），所以下面的 `.cmd` 绕法不再是唯一办法 —— 直接用它可以跑 `node_modules/typescript/bin/tsc`、`node_modules/tsdown/dist/run.mjs`、`node_modules/vitest/vitest.mjs` 与 `scripts/*.mjs`。`pnpm` 仍然只有 `.cmd` shim，绕法是 `node "…\resources\app\node_modules\pnpm\bin\pnpm.mjs"`。）
 - **⚠️ 不要用 `pnpm` / `node` 的 `.cmd` shim 跑命令 —— 会弹出可见的 CMD 窗口，打断用户用电脑。**
@@ -1058,7 +1136,7 @@ agency-agents-ll:
 cd G:\dsh\dsh-agency-agents-ll
 pnpm build              # typecheck + tsdown（Host ESM / 客户端 ModuleLoader CJS）
 pnpm exec vitest run    # 108 项：roster-settings 17 + remote 16 + host 41 + 客户端 jsdom 34
-pnpm verify             # 35 项发布门禁
+pnpm verify             # 37 项发布门禁
 pnpm check              # 13 项机械门禁 → sync/report.json
 pnpm sync               # 拉上游英文资产、刷新 manifest（幂等，离线）
 pnpm upstream:check     # 上游名册动了吗？秒级、不写盘（0 没变 / 1 变了 / 2 没查成）
@@ -1077,10 +1155,17 @@ pnpm avatars:inline     # 由 assets/avatar 重新生成 src/client/avatars.ts
 安装 / 卸载（desktop profile）：
 
 ```powershell
-dsh plugin --profile desktop add G:\dsh\dsh-agency-agents-ll
-dsh plugin --profile desktop remove dsh-agency-agents-ll
-dsh --profile desktop --dump-config      # 应见 agency-agents-ll 这一行（0.1.7 起只有一行）
+# 新装的 CLI 实体（别用 dsh.cmd shim，会弹 CMD 窗口）：
+$dsh = 'C:\Users\LL\AppData\Local\Programs\DeepSeek Harness\DeepSeek Harness.exe'
+$cli = 'C:\Users\LL\AppData\Local\Programs\DeepSeek Harness\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\cli.js'
+$env:ELECTRON_RUN_AS_NODE = '1'
+
+& $dsh --expose-internals $cli plugin --profile desktop add G:\dsh\dsh-agency-agents-ll
+& $dsh --expose-internals $cli plugin --profile desktop remove dsh-agency-agents-ll
+& $dsh --expose-internals $cli plugin --profile desktop version-exemptions   # 版本豁免表，见 §5.22.2
 ```
+
+> `plugin` 子命令**能**管 desktop profile（实测 `version-exemptions` 返回 `{}`，exit=0），但**启动和 `--dump-config` 会被拒**：`error: profile "desktop" is managed exclusively by the Electron application`。想看组合后的配置，就用 `--profile headless` / `lltest` 加 `--patch` 覆盖层。
 
 隔离验证 profile `lltest`（`C:\Users\LL\.dsh\profiles\lltest`）同样以 link 方式装着本插件，改代码后无需重装即可验证，**不会影响 desktop**。
 
@@ -1113,12 +1198,14 @@ dsh --profile desktop --dump-config      # 应见 agency-agents-ll 这一行（0
 | 参考实现里没有移植的能力 | 「猜宿主设置按钮」的 DOM 启发式。宿主 `ui-settings-general` 本地不可读、无法验证，故不做；菜单空态改为提示「请先在设置页启用」 |
 | 与 `@michengai/dsh-agency-agents` 的关系 | 用户已自行卸载。若两者同时安装会**工具名冲突**（都注册 `list_experts` / `summon_expert` / `summon_experts`） |
 | **刻意没做的事**（防止后来者"顺手修好"） | ① 头像检查器**不**因扩展名不是小写 `.svg` 判失败（现有素材全小写，那是新规则不是缺陷）。② `@deepseek-ai/dsh-system-prompt` 保留在依赖里——**它现在是在用的**（§5.19 的系统提示段落），5.18 时它曾因"全文件没人用"被删过一次。③ 0.1.7 起 `Config.enabled` **已经**放宽成 `z.any()` 了（§5.21.2 第 2 条：schema 拒绝一个值的代价从"那块设置不可用"变成"整个插件不加载"），"不放宽"那条旧理由随之作废 |
+| **浏览器半边在 `0.2.0-rc.2` 上的真机表现** | **待用户重启 desktop app 验收**（§5.22.7）。Host 半边已在 0.2.0 上真机跑通；客户端四处契约（`$mount` / `remote.*` / `slots.inject` / `configForms.get`）逐条核对过**都没变**，但"核对过"不等于"跑过" |
 | **浏览器半边在 `0.1.7-rc.2` 上的真机表现** | **已实测（用户确认，2026-09-28）**：名册页渲染、搜索、`@` 触发菜单、卡片开关、查看提示词、复制提示词、自建专家编辑器**全部正常**（§5.21.10）。**仍未单独验证**：Remote 的真实 HTTP 路由 —— 它与 0.1.5 时同级，只有「页面能用」这一条间接证据；要做成直接证据需要在 HTTP 层发一次带凭据的 RPC |
-| **改 Host 代码要重启 DSH Desktop** | 不是缺陷也不是待办，是 0.1.7 的行为（§5.21.6）。浏览器半边仍然免刷新 |
+| **改 Host 代码要重启 DSH Desktop** | 不是缺陷也不是待办，是 0.1.7 起的宿主行为（§5.21.6），0.2.0 同样成立（0.2.0 起 CLI 连 `--profile desktop` 的启动都拒，见 §6）。浏览器半边仍然免刷新 |
 | 用户目前无法表达"模型可以用哪些专家" | `enabled` 只治理浏览器侧（`@` 菜单），4 个工具看**全部 279 位**（D17）。这是刻意的默认，用户 2026-09-14 明确表示**暂不需要**这个控制权；真要做，正确做法是**加一个独立字段**（`agentEnabled`），而不是让 `enabled` 在非空时兼职过滤工具——那会把"我不想在菜单里看到它"变成"禁止模型用它" |
 
 ## 10. 续工起点
 
+- **DSH 又一次升级时，第一站是版本闸门，不是代码**（§5.22）：`dsh plugin --profile <p> version-exemptions`（正常应为 `{}`）＋ `%DSH_HOME%\profiles\<p>\.plugin-manager\logs\*\pnpm.log`（那里写着 `dsh: warning: Plugin … is incompatible with dsh …`）。本插件的 15 个 DSH peer **必须是范围**（现在写作 `>=0.1.7-rc.2 <0.3.0-0`），`pnpm verify` 有两条断言钉着；改完范围要**重启 desktop app** 才在桌面上生效。**宿主日志里"没有本插件的记录"也是一种证据**：那说明代码一行没跑，问题在清单层。
 - 改 Host 逻辑 → `src/index.ts`（Config + 工具 + 系统提示段 + 挂载 Remote）、`src/remote.ts`（Remote 方法）、`src/roster-settings.ts`（enabled 与自定义专家的读写契约）、`src/host-settings.ts`（读自己的设置投影与宿主界面语言）。**改完必须重启 DSH Desktop**（§5.21.6）
 - 动设置相关的东西之前先读 §5.21.2：0.1.7 的设置是**从本插件的 `Config` 派生**的，命名空间就是 profile 条目 id `agency-agents-ll`（= `contract.ts` 的 `SETTINGS_NS`）。要加一个可被浏览器改的字段，就得是 `.volatile()`；普通字段改动会重挂插件。**别再去找 `settings.installSection` / `settings.get`，0.1.7 里没有这两个东西**
 - 改浏览器端 → `src/client/index.ts`（页面与触发器）、`src/client/locales.ts`（词条，zh 为 key 集真源，en 由 `satisfies` 编译期强制一致）

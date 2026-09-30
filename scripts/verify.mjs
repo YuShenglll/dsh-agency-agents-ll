@@ -64,6 +64,24 @@ check(
   injected.length > 0 && notPeer.length === 0,
   notPeer.join(', '),
 )
+// 0.2.0 refuses to load a plugin whose declared DSH peer range excludes the
+// running runtime, so one exact pin turns every DSH upgrade into a plugin row
+// that never loads. Ranges keep the declaration honest across rc bumps; the
+// versions this plugin is actually verified against are named in README.md and
+// docs/STATUS.md, and they must stay inside the range.
+const dshPeers = Object.entries(packageJson.peerDependencies ?? {})
+  .filter(([name]) => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-'))
+const exactPins = dshPeers.filter(([, range]) => /^\d+\.\d+\.\d+/.test(range.trim())).map(([name]) => name)
+check(
+  'DSH peer 依赖声明为范围而不是精确版本',
+  dshPeers.length > 0 && exactPins.length === 0,
+  exactPins.join(', '),
+)
+check(
+  '所有 DSH peer 使用同一个范围',
+  new Set(dshPeers.map(([, range]) => range)).size === 1,
+  [...new Set(dshPeers.map(([, range]) => range))].join(' / '),
+)
 check('发布文件齐全', ['lib', 'assets', 'cordis.patch.yml', 'README.md', 'NOTICE', 'LICENSE']
   .every((entry) => packageJson.files?.includes(entry)))
 check('导出 Host 与客户端入口', packageJson.exports?.['.'] !== undefined && packageJson.exports?.['./client'] !== undefined)

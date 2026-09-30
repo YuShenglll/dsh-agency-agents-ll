@@ -4,7 +4,7 @@ DeepSeek Harness 的**中英双语** The Agency 专家名册插件 —— 专家
 
 Bilingual (English/Chinese) Agency expert roster for DeepSeek Harness. Expert names and introductions are Chinese; the persona prompt switches language.
 
-> 状态：**P0–P6 完成，已适配 DSH `0.2.0-rc.2`**（Host 半边真机验证通过；浏览器半边待重启桌面 app 复验），279 位专家的中英文档案与 279 张专属头像全部通过机械门禁。各阶段的实测证据、尚未验证的路径与环境要点见 [`docs/STATUS.md`](docs/STATUS.md)：`0.2.0` 这次（版本闸门）见其 §5.22，`0.1.7` 那次（三条代码级不兼容）见其 §5.21。
+> 状态：**P0–P6 完成，已适配 DSH `0.2.0-rc.2`**（Host 与浏览器两边均已真机复验，desktop profile 上零版本豁免），279 位专家的中英文档案与 279 张专属头像全部通过机械门禁。各阶段的实测证据、尚未验证的路径与环境要点见 [`docs/STATUS.md`](docs/STATUS.md)：`0.2.0` 这次（版本闸门）见其 §5.22，`0.1.7` 那次（三条代码级不兼容）见其 §5.21。
 
 ## 它做什么
 

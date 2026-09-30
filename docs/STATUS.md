@@ -13,7 +13,7 @@
 > **代价**：0.1.7 的桌面版**没有 Host 模块热重载**，改 Host 代码必须重启 DSH Desktop（§5.21.6）。旧文档里「改完不用重启」的承诺从这一版起不成立。
 > **升级副作用（已处理）**：harness 的设置迁移没能把本插件的 section 导进来，用户此前启用的 **6 位专家一度全部丢失**。数据一直在 `%DSH_HOME%\settings.yaml.imported`（改名而非删除），已写回 profile patch 恢复 —— 原因、证据与恢复步骤见 **§5.21.12**。**那个 `.imported` 文件是本机唯一的一份，不要删。**
 
-> **还没实测的（0.2.0 这一轮）**：**只有一件 —— 浏览器半边。** Host 侧已在 `0.2.0-rc.2` 上用 `headless` profile + 覆盖层跑通（§5.22.5，**没用任何豁免**）。浏览器半边必须重启 DSH Desktop 才能验收：0.2.0 的 `dsh` README 写明 `desktop` 是 Electron 保留的 profile，CLI 拒绝为它启动或导出配置。
+> **还没实测的（0.2.0 这一轮）**：**清单空了。** 用户 2026-10-01 00:34 重启 DSH Desktop 后两边都实测通过 —— Host 侧在**重启后的桌面会话里**直接调通了工具（`list_experts()` 返回 279 位 / 18 分区，`division="research"` 返回 `研究（1）`），浏览器侧由用户逐个确认（设置页、名册卡片与搜索、`@` 菜单、卡片开关、查看提示词弹窗）。**desktop profile 上没有任何版本豁免**（`version-exemptions` = `{}`），能加载完全是因为清单里的范围覆盖了运行版本。细节见 **§5.22.8**。
 
 > **还没实测的（0.1.7 这一轮）**：**清单空了。** Host 侧（日志无错 + 4 个工具路径）与浏览器侧**全部**在 `0.1.7-rc.2` 的 desktop profile 上实测通过 —— 名册页渲染、搜索、`@` 触发菜单、卡片开关、**查看提示词、复制提示词、自建专家编辑器**（用户逐个确认，见 §5.21.10）。唯一仍只有间接证据的是 Remote 的真实 HTTP 路由（页面可用即证明可达），这一条从 0.1.5 起就是同样的状态。
 
@@ -97,7 +97,7 @@ describe_expert(上线就绪度评审专家)
 
 诚实清单，别当成已验证。**四条工具路径已全部真跑过**；浏览器端在 0.1.5 之后**又在 0.1.7 上整条复测了一遍**（§5.21.10）。下表是 0.1.5 那一轮的原始记录，0.1.7 的结论见最后一列：
 
-> **2026-10-01（DSH `0.2.0-rc.2`）追加一行状态**：Host 侧 4 个工具路径在 `headless` profile + 覆盖层上真跑过（§5.22.5，**不带任何豁免**）；**浏览器侧那一整列还没有在 0.2.0 上复测** —— 客户端四处契约逐条核对过都没变，但"核对过"不等于"跑过"，重启 desktop app 后由用户确认。
+> **2026-10-01（DSH `0.2.0-rc.2`）追加一行状态**：Host 侧 4 个工具路径先在 `headless` profile + 覆盖层上真跑过（§5.22.5，**不带任何豁免**），随后在**用户重启后的桌面会话里**又直接调通（§5.22.8）；浏览器侧整列也已由用户复测确认（设置页、名册卡片与搜索、`@` 菜单、卡片开关、查看提示词弹窗）—— **0.2.0 这一轮的清单和 0.1.7 一样是空的**。
 
 | 项 | 状态（0.1.5） | 0.1.7 复测 |
 |---|---|---|
@@ -1053,7 +1053,7 @@ B 在本机实测可用（先在 `headless` profile 上授予，`compatibility.j
 
 ### 5.22.6 取证方法：给 `app.asar` 写一个只读读取器
 
-新版把宿主打包成 `resources\app.asar`（121 MB），`read` 工具直接读 asar 内路径会失败（`Error: Cannot mix BigInt and other types`）。临时工具在 `.tmp020\`（不进版本库）：`asar.mjs`（`list` / `cat` / `dump <regex> <outDir>`）、`grep.mjs`（在 asar 原始字节里搜字符串并把命中归属到具体文件）、`slice.mjs`、`dbg.mjs`。
+新版把宿主打包成 `resources\app.asar`（121 MB），`read` 工具直接读 asar 内路径会失败（`Error: Cannot mix BigInt and other types`）。临时工具在 `.tmp020\`（不进版本库）：`asar.mjs`（`list` / `cat` / `dump <regex> <outDir>`）、`grep.mjs`（在 asar 原始字节里搜字符串并把命中归属到具体文件）、`slice.mjs`、`dbg.mjs`。**本轮收尾时该目录已删除** —— 但下面两条规则够用来重写它，重跑一次 dump 只需几秒。
 
 - asar 头部实测：字节 0..3 = `04 00 00 00`，**JSON 头从偏移 16 开始**（`u32@12` = 头长度 3392048），内容基址 = 3392064，`entry.offset` 相对该基址。
 - asar 内 `@deepseek-ai/*` 共 **289 个包，一个 `.d.ts` 都没有**，但**每个包都带 `README.md`** —— 契约文本的唯一来源（已 dump 285 份到 `.tmp020/readme/`，文件名形如 `dsh-client-ui-settings__README.md`）。**下次再遇到"契约变了没"的问题，先读这些 README，不要硬啃压缩后的 JS。**
@@ -1061,6 +1061,18 @@ B 在本机实测可用（先在 `headless` profile 上授予，`compatibility.j
 ### 5.22.7 还没验证的
 
 **浏览器半边**（名册页、`@` 菜单、卡片开关、设置页、弹窗）只能在真实的 desktop profile 上验收 —— 0.2.0 的 `dsh` README 明确写了 *"The `desktop` name is reserved for the Electron-owned profile, so the CLI rejects boot and config-dump requests for it."*，所以**必须由用户重启 DSH Desktop**。CLI 侧的结论只覆盖 Host 半边。
+
+### 5.22.8 重启 desktop app 后的真机复验（2026-10-01 00:34）
+
+**结论：两边都通过了，0.2.0 这一轮的诚实清单空了。**
+
+- 用户在 **00:34:40** 重启 DSH Desktop。`%DSH_HOME%\dsh-config-manager\boot-state\boot-state.json` 记 `ok: true` / `okAt 2026-09-30T16:34:44.037Z`（本地 00:34:44），`running\desktop.json` 记 pid 38484 / port 19387。
+- **闸门是"真放行"，不是"走了后门"**：`dsh plugin --profile desktop version-exemptions` 仍返回 `{}` —— desktop profile 上**一份豁免都没授**，能加载完全是因为清单里的范围覆盖了运行版本。同一判定在 bundle 解析路径上也可复现：`dsh --profile lltest --dump-config` 里本插件的行是启用的，没有 `disabling profile plugin row …`。
+- **Host 半边在重启后的桌面会话里直接调通了真工具**（不是 headless 代跑）：`list_experts()` → `共 279 位可选专家，覆盖 18 个分区`；`list_experts(division="research")` → `研究（1）` 与 `🔍 研究综合专家 —— 文献综述与证据综合专家，把零散来源整理成如实加权的证据图谱。`。第二条同时证明**设置投影是活的**（`enabled` 那套活值走 `ctx.settings.describe()`）。
+- **"插件真的挂上了"另有一条独立证据**：重启后这次会话的系统提示里重新出现了名册那一行，它来自 `src/i18n.ts:57`，**只有插件加载才会注入**。这条比工具调用更早、更廉价 —— 下次想快速判断"插件加载了没"，先看系统提示里有没有这一行。
+- **用户的既有设置没在升级中丢失**：`profiles\desktop\cordis.patch.yml` 里 6 位已启用专家（`engineering-prompt-engineer` / `specialized-document-generator` / `specialized-master-plan-architect` / `specialized-workflow-architect` / `product-manager` / `research-synthesist`）与 `customExperts: []` 原样保留 —— 与 §5.21.12 那次迁移事故刚好相反，说明这次升级没有触发新的设置迁移。
+- **浏览器半边（用户逐个确认："都正常"）**：设置页里的专家名册分区、名册卡片与搜索、输入框 `@` 候选菜单、卡片开关，以及上一轮刚修的那处 —— **「查看提示词」弹窗背景是不透明的**（§5.21.11 的 CSS 没有被 0.2.0 打回）。
+- **取证上限**：新装**不写宿主日志**（§6），渲染进程也没有落盘日志，所以浏览器半边的结论仍然只有"用户目视"这一条来源 —— 与 0.1.5 / 0.1.7 两轮同级。Remote 的真实 HTTP 路由依旧只有「页面能用」这条间接证据。
 
 ## 6. 环境要点（重开会话必读）
 
@@ -1198,7 +1210,7 @@ $env:ELECTRON_RUN_AS_NODE = '1'
 | 参考实现里没有移植的能力 | 「猜宿主设置按钮」的 DOM 启发式。宿主 `ui-settings-general` 本地不可读、无法验证，故不做；菜单空态改为提示「请先在设置页启用」 |
 | 与 `@michengai/dsh-agency-agents` 的关系 | 用户已自行卸载。若两者同时安装会**工具名冲突**（都注册 `list_experts` / `summon_expert` / `summon_experts`） |
 | **刻意没做的事**（防止后来者"顺手修好"） | ① 头像检查器**不**因扩展名不是小写 `.svg` 判失败（现有素材全小写，那是新规则不是缺陷）。② `@deepseek-ai/dsh-system-prompt` 保留在依赖里——**它现在是在用的**（§5.19 的系统提示段落），5.18 时它曾因"全文件没人用"被删过一次。③ 0.1.7 起 `Config.enabled` **已经**放宽成 `z.any()` 了（§5.21.2 第 2 条：schema 拒绝一个值的代价从"那块设置不可用"变成"整个插件不加载"），"不放宽"那条旧理由随之作废 |
-| **浏览器半边在 `0.2.0-rc.2` 上的真机表现** | **待用户重启 desktop app 验收**（§5.22.7）。Host 半边已在 0.2.0 上真机跑通；客户端四处契约（`$mount` / `remote.*` / `slots.inject` / `configForms.get`）逐条核对过**都没变**，但"核对过"不等于"跑过" |
+| **浏览器半边在 `0.2.0-rc.2` 上的真机表现** | **已实测（用户确认，2026-10-01）**：设置页的专家名册分区、名册卡片与搜索、`@` 候选菜单、卡片开关、查看提示词弹窗（不透明）**全部正常**（§5.22.8）。Host 侧工具在**重启后的桌面会话里**直接调通，desktop profile **零版本豁免**；客户端四处契约（`$mount` / `remote.*` / `slots.inject` / `configForms.get`）在 0.2.0 源码里逐条核对**都没变** |
 | **浏览器半边在 `0.1.7-rc.2` 上的真机表现** | **已实测（用户确认，2026-09-28）**：名册页渲染、搜索、`@` 触发菜单、卡片开关、查看提示词、复制提示词、自建专家编辑器**全部正常**（§5.21.10）。**仍未单独验证**：Remote 的真实 HTTP 路由 —— 它与 0.1.5 时同级，只有「页面能用」这一条间接证据；要做成直接证据需要在 HTTP 层发一次带凭据的 RPC |
 | **改 Host 代码要重启 DSH Desktop** | 不是缺陷也不是待办，是 0.1.7 起的宿主行为（§5.21.6），0.2.0 同样成立（0.2.0 起 CLI 连 `--profile desktop` 的启动都拒，见 §6）。浏览器半边仍然免刷新 |
 | 用户目前无法表达"模型可以用哪些专家" | `enabled` 只治理浏览器侧（`@` 菜单），4 个工具看**全部 279 位**（D17）。这是刻意的默认，用户 2026-09-14 明确表示**暂不需要**这个控制权；真要做，正确做法是**加一个独立字段**（`agentEnabled`），而不是让 `enabled` 在非空时兼职过滤工具——那会把"我不想在菜单里看到它"变成"禁止模型用它" |
